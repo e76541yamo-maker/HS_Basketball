@@ -42,6 +42,12 @@ try{
   assert.match(await page.locator('#plan-comparison').innerText(),/CLE 終場推演勝出比例.*95% 信賴區間/s);
   await page.locator('#execute').click();
   assert.match(await page.locator('#status-strip').innerText(),/GSW.*CLE 勝率/s);
+  await page.locator('#undo').click();
+  await page.locator('[data-action="spotup"]').click();
+  await page.locator('#clock-call').selectOption('quickThree');
+  await page.locator('#execute').click();
+  await page.locator('#analysis-details > summary').click();
+  await page.locator('#analysis .fact-chip').filter({hasText:/本隊（CLE）先驗後勝率：10\.50%/}).first().waitFor();
   assert.deepEqual(errors,[]);
   console.log('SHARED UI PASS:',name,'fixed controls, three-plan previews and rollouts, feedback, review, both tutorials; console errors: 0');
   await page.close();

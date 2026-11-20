@@ -5,8 +5,9 @@ const fact=(source,label,value)=>({source,label,value});
 export function analyze(s,decision={}) {
  const action=decision.action==='replay'?realChoice(s):decision.action||'pnr',d=distribution(s,action,decision);
  const value=evaluateOption(s,decision),expected=value.expectedPoints,valuation=valueModel(s),wp=wpModel(s);
+ const team=s.coach?.team||s.possession,managedWP=team===s.possession?value.winProbabilityAfter:1-value.winProbabilityAfter;
  const actual=[fact('實際','逐球完整回合',DATA.validation.possessionCount),fact(s.mode==='replay'?'實際':'估計','目前比分',s.score.CLE+'：'+s.score.GSW)];
- const model=[fact('估計','估值／勝率模型',VALUE_MODELS[valuation].label+'／'+WP_MODELS[wp].label),fact('估計','每回合先驗得分',expected.toFixed(2)),fact('估計','先驗後勝率',(100*value.winProbabilityAfter).toFixed(2)+'%'),fact('估計','選項槓桿',value.leverage.toFixed(3)),fact('估計','使用秒數',d.seconds.toFixed(1)),fact('估計','陣容效率倍率',d.adjustment.toFixed(3))];
+ const model=[fact('估計','估值／勝率模型',VALUE_MODELS[valuation].label+'／'+WP_MODELS[wp].label),fact('估計','每回合先驗得分',expected.toFixed(2)),fact('估計','本隊（'+team+'）先驗後勝率',(100*managedWP).toFixed(2)+'%'),fact('估計','選項槓桿',value.leverage.toFixed(3)),fact('估計','使用秒數',d.seconds.toFixed(1)),fact('估計','陣容效率倍率',d.adjustment.toFixed(3))];
  if(valuation==='fourFactors') {
   for(const [scope,f] of [['本場球隊',teamFactors(s.possession,'game')],['年度球隊',teamFactors(s.possession)],['場上陣容代理',lineupFactors(s)]]) {
    for(const [key,label] of Object.entries({efg:'有效命中率',tov:'失誤率',orb:'進攻籃板率',ftRate:'罰球命中／出手'}))model.push(fact(f.source,scope+'・'+label,(100*f[key]).toFixed(2)+'%'));
@@ -23,8 +24,8 @@ export function analyze(s,decision={}) {
  const con=['估計｜失誤率 '+turnover+'：'+(d.turnover?'失誤會提早結束這波進攻':'此罰球窗口沒有進攻失誤')+'；若'+(d.turnover?'換打法後失誤更少，原方案的代價就偏高':'回到活球，這項估計就不適用')+'。'];
  const attack=['估計｜先驗得分 '+expected.toFixed(2)+' 分：對手可換防降低得分；若改防守後得分不降，這種對策就不值得。'];
  const contingency=[actual[1].source+'｜目前比分 '+actual[1].value+'：先看分差再管理時鐘；若下一波反轉領先，原時鐘策略就要重選。'];
- const comparison=compareModels(s,decision);
- const comparisonFacts=comparison.rows.map(row=>({option:row.label,models:row.values.map((v,i)=>({model:comparison.columns[i].label,selected:v.valueModel===valuation&&v.wpModel===wp,expectedPoints:v.expectedPoints.toFixed(2),winProbabilityAfter:(100*v.winProbabilityAfter).toFixed(2)+'%',leverage:v.leverage.toFixed(2),rank:v.rank}))}));
+ const comparison=compareModels(s,decision,team);
+ const comparisonFacts=comparison.rows.map(row=>({option:row.label,managedTeam:team,models:row.values.map((v,i)=>({model:comparison.columns[i].label,selected:v.valueModel===valuation&&v.wpModel===wp,expectedPoints:v.expectedPoints.toFixed(2),managedTeamWinProbabilityAfter:(100*v.winProbabilityAfter).toFixed(2)+'%',leverage:v.leverage.toFixed(2),rank:v.rank}))}));
  return {summary:(PLAY_TYPES[action]?.label||'剩餘罰球')+'・'+s.possession+' 完整回合策略（估計）',comparisonFacts,
   facts:[...actual,...model,...cost],pro,con,attack,contingency,
   points:[{sign:'＋',text:'支持這個選擇',detail:pro[0],facts:[...actual,...model]},

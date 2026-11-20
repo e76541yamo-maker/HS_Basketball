@@ -67,9 +67,26 @@ test('selected models flow through arguments, full-game Monte Carlo and represen
  const logistic=monteCarlo({...s,wpModel:'logistic'},decision,24);
  assert.notEqual(m.selected.modelWinProbability,logistic.selected.modelWinProbability);
  assert.equal(m.selected.winProbability,logistic.selected.winProbability);assert.equal(m.selected.expectedMargin,logistic.selected.expectedMargin);
- const a=analyze(s,decision);assert.ok(a.facts.some(f=>f.value==='球員影響／布朗運動'));assert.ok(a.facts.some(f=>f.label==='先驗後勝率'));assert.equal(a.comparisonFacts.length,8);
+ const a=analyze(s,decision);assert.ok(a.facts.some(f=>f.value==='球員影響／布朗運動'));assert.ok(a.facts.some(f=>f.label==='本隊（CLE）先驗後勝率'));assert.equal(a.comparisonFacts.length,8);
  for(const row of a.comparisonFacts){const selected=row.models.filter(m=>m.selected);assert.equal(selected.length,1);assert.equal(selected[0].model,'球員影響・布朗運動');}
  const ff=analyze({...s,valueModel:'fourFactors'},decision);assert.ok(ff.facts.some(f=>f.label.includes('場上陣容代理')&&f.source==='估計'));assert.ok(ff.facts.some(f=>f.label.includes('年度球隊')&&f.source==='實際'));
+});
+test('possession argument chips and Claude comparison facts stay with CLE after quickThree turns over possession',()=>{
+ const initial={...momentState('key3'),coach:{team:'CLE'}};
+ const s=play(initial,{action:'spotup',clock:'quickThree'}),decision={action:options(s)[0].id};
+ assert.equal(s.possession,'GSW');assert.equal(s.coach.team,'CLE');
+ const a=analyze(s,decision),label='本隊（CLE）先驗後勝率';
+ assert.equal(a.facts.find(f=>f.label===label).value,'10.50%');
+ assert.equal(a.points[0].facts.find(f=>f.label===label).value,'10.50%');
+ const offense=compareModels(s,decision);
+ a.comparisonFacts.forEach((row,i)=>{
+  assert.equal(row.managedTeam,'CLE');
+  row.models.forEach((m,j)=>{
+   const v=offense.rows[i].values[j];
+   assert.equal(m.managedTeamWinProbabilityAfter,(100*(1-v.winProbabilityAfter)).toFixed(2)+'%');
+   assert.equal(m.rank,1+offense.rows.filter(r=>v.winProbabilityAfter-r.values[j].winProbabilityAfter>1e-12).length);
+  });
+ });
 });
 test('all model combinations keep legal scores, control and clocks through an endgame',()=>{
  for(const valueModel of Object.keys(VALUE_MODELS))for(const wpModel of Object.keys(WP_MODELS))for(let seed=0;seed<4;seed++){
