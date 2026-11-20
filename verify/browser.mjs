@@ -24,8 +24,8 @@ try {
  assert.equal(s.phase,'final');assert.deepEqual(s.score,{CLE:83,GSW:89});
  console.log(`FULL HISTORICAL GAME: ${decisions} UI decisions; Q${s.quarter}; CLE ${s.score.CLE} – GSW ${s.score.GSW}; final`);
  await page.screenshot({path:'/home/ubuntu/shots/basketball-full-game.png',fullPage:true});
- await page.locator('[data-moment="key3"]').click();await page.locator('[data-action="shoot"]').click();await page.locator('#analysis .argument').first().locator('summary').click();
- await page.locator('#simulate').click();await page.locator('.simulation-result').waitFor({timeout:120000});assert.match(await page.locator('.simulation-result').innerText(),/實際動作模型/);
+ await page.locator('[data-moment="key3"]').click();await page.locator('[data-action="shoot"]').click();assert.ok(await page.locator('#analysis .argument').nth(1).locator('.fact-chip').first().isVisible());
+ await page.locator('#simulate').click();await page.locator('.simulation-result').waitFor({timeout:120000});assert.match(await page.locator('.simulation-result').innerText(),/實際動作模型/);assert.match(await page.locator('.simulation-result').innerText(),/6\.2%/);for(const risk of await page.locator('.risk').all()){const labels=await risk.locator('[data-remedy]').allTextContents();assert.ok(new Set(labels.map(s=>s.match(/終場分差 ([−\d.-]+)/)?.[1])).size>1);}console.log('ENDGAME UI: '+(await page.locator('.simulation-result').innerText()).replaceAll('\n',' | '));
  await page.evaluate(()=>document.fonts.ready);await page.screenshot({path:'/home/ubuntu/shots/basketball-desktop.png',fullPage:true});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
  await page.locator('[data-remedy]').first().click();assert.equal((await read()).state.mode,'simulation');assert.ok((await read()).state.defensePlan);
  while(!await page.locator('#execute').isDisabled()) {await page.locator('[data-action="drive"]').click();await page.locator('#execute').click();}

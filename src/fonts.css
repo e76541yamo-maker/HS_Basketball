@@ -3,12 +3,12 @@
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url('/icons/noto-tc-400.ttf?v=b97550ba6786') format('truetype');
+  src: url('/icons/noto-tc-400.ttf?v=9d9d7c0c04dc') format('truetype');
 }
 @font-face {
   font-family: "Noto Sans TC";
   font-style: normal;
   font-weight: 500 900;
   font-display: swap;
-  src: url('/icons/noto-tc-600.ttf?v=b492f5045827') format('truetype');
+  src: url('/icons/noto-tc-600.ttf?v=4630c32bade5') format('truetype');
 }

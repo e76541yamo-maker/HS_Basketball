@@ -53,14 +53,22 @@ const baskets=Object.fromEntries(game.holds.map(h=>[h.team+':'+h.q,h.basketX]));
 function refreshGeometry(s,rng) {
   s.positions=s.positions.map(([id,x,y])=>[id,Math.max(1,Math.min(93,x+(rng()-.5)*5)),Math.max(1,Math.min(49,y+(rng()-.5)*5))]);
 }
-function switchBall(s,t=other(s.possession)) { s.possession=t;s.handler=s.lineups[t][0];s.shotClock=24;s.basketX=baskets[t+':'+Math.min(4,s.quarter)];const p=s.positions.find(([id])=>id===s.handler);s.zone=zoneAt(p[1],p[2],s.basketX); }
+function switchBall(s,t=other(s.possession)) { s.possession=t;s.handler=s.lineups[t][0];s.shotClock=24;s.basketX=baskets[t+':'+Math.min(4,s.quarter)];s.transition=true;const p=s.positions.find(([id])=>id===s.handler);s.zone=zoneAt(p[1],p[2],s.basketX); }
 export function simulateHold(state,action) {
   const s=copy(state),rng=rngFrom(s.seed);s.mode='simulation';s.positionsActual=false;s.anchor=state.anchor??state.cursor;s.seed=Math.floor(rng()*4294967296);s.turn++;
   const p=player(s.handler),d=game.distributions[p.id],stats=profile(s);
   const durations=d.durations.length?d.durations:teamDurations[p.team];
-  const seconds=Math.min(s.clock,s.shotClock,Math.max(.4,durations[Math.floor(rng()*durations.length)]||2));
+  const lead=s.score[s.possession]-s.score[other(s.possession)];
+  const intentional=s.quarter>=4&&s.clock<=40&&lead>0&&lead<=9&&(lead>=4||s.clock<=s.shotClock+2);
+  const advance=s.transition?4:0;
+  if(s.transition) {
+    s.positions=s.positions.map(([id,x,y])=>player(id).team===s.possession?[id,s.basketX<47?Math.min(x,28):Math.max(x,66),y]:[id,x,y]);
+    s.zone=zoneAt(...s.positions.find(([id])=>id===s.handler).slice(1),s.basketX);s.transition=false;
+  }
+  const seconds=Math.min(s.clock,s.shotClock,intentional?1.5:advance+Math.max(.4,durations[Math.floor(rng()*durations.length)]||2));
   s.elapsed+=seconds;s.clock=Math.max(0,s.clock-seconds);s.shotClock=Math.max(0,s.shotClock-seconds);s.last={kind:'持球重整',points:0,seconds};
-  if(s.shotClock<.001||rng()<stats.turnover) {s.last.kind=s.shotClock<.001?'進攻時間違例':'失誤／抄截';switchBall(s);}
+  if(intentional&&s.clock>0) {for(let i=0;i<2;i++)if(rng()<stats.ft){s.score[s.possession]++;s.last.points++;}s.last.kind='落後方戰術犯規・兩罰';switchBall(s);}
+  else if(s.shotClock<.001||rng()<stats.turnover) {s.last.kind=s.shotClock<.001?'進攻時間違例':'失誤／抄截';switchBall(s);}
   else if(action.startsWith('pass:')) { s.handler=action.slice(5);const pos=s.positions.find(([id])=>id===s.handler);s.zone=zoneAt(pos[1],pos[2],s.basketX);s.last.kind='傳球'; }
   else if(action==='shoot'||action==='drive') {
     if(action==='drive') {s.zone='rim';const pos=s.positions.find(([id])=>id===s.handler);pos[1]=s.basketX<47?9:85;pos[2]=25;}
@@ -96,6 +104,11 @@ export function play(s,action) {
 function weighted(entries,rng) { let n=rng()*entries.reduce((sum,[,w])=>sum+w,0);for(const [id,w] of entries) {n-=w;if(n<=0)return id;} return entries.at(-1)[0]; }
 export function policy(s) {
   if(s.shotClock<5) return 'shoot';
+  if(s.quarter>=4&&s.clock<=120) {
+    const gap=s.score[s.possession]-s.score[other(s.possession)];
+    if(gap>0&&s.shotClock>7)return 'reset';
+    if(gap<0)return rngFrom(s.seed+101)()<(gap<=-4?.8:.6)?'shoot':'drive';
+  }
   const rng=rngFrom(s.seed+101),counts=game.distributions[s.handler].choices[s.zone]||{};
   const action=weighted([['pass',(counts.pass||0)+2],['shoot',(counts.shoot||0)+2],['drive',(counts.drive||0)+1],['reset',(counts.reset||0)+1]],rng);
   if(action!=='pass') return action;
