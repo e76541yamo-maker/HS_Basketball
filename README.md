@@ -1,72 +1,80 @@
-# HS Basketball — Courtside strategy laboratory
+# Courtside — tracking replay and strategy branches
 
-A Traditional Chinese, browser-only basketball strategy prototype of the 2002 Western Conference Finals: Los Angeles Lakers vs Sacramento Kings. It follows HS-BaseSta's static ES-module/Python architecture, three-column workspace, progressive pro/con disclosure, bundled subset fonts, seeded engine, Web Worker simulations and browser-local saves. No build step or runtime npm dependencies.
+A Traditional Chinese browser prototype for **2015-12-25 Cleveland at Golden State** (game `0021500438`, final CLE 83–GSW 89). Following HS-BaseSta / HS-Mahjong: deterministic state transitions, evidence-tagged arguments, distributions, leverage, risk/remedy branches, a Monte Carlo worker, and local branch/undo/autosave. No build step or browser dependencies; Python stdlib serves ES modules and an optional Claude rewrite endpoint.
 
-## Run and check
-
-Python 3.10+ and Node 22+:
+## Run and test
 
 ```sh
-python3 server.py
-# http://localhost:3000 (PORT overrides 3000)
 source ~/.nvm/nvm.sh
 npm run check && npm test
+python3 server.py                 # http://localhost:3000
 ```
 
-The server serves an explicit static-file allowlist; never expose an API-key-enabled instance to untrusted users. No accounts, tracking or remote storage. A missing or corrupt local save starts a fresh game.
+Tests include a complete historical replay, a seeded **100-full-game** simulation sweep (pass changes handler and ends a hold; legal score increases, monotone clocks, overtime and decisive finals), branch persistence, evidence/Monte Carlo reproducibility, HTTP security, Claude fallbacks/number validation, and bundled font coverage. Browser verifier: `node verify/browser.mjs` (uses Playwright from the neighboring HS-BaseSta repository).
 
-## Rules and interactions
+## Sources and reproduction
 
-One turn is one player's hold of the ball. A named pass ends that turn and gives the receiver the next hold; a steal/clock violation can instead change possession. Each action consumes 2–9 seconds, capped by the remaining game/24-second clocks. Drive, pull-up, three and post-up resolve a shot; screen and hold/reset consume a turn while retaining the handler. The screen creates a small next-shot advantage. Shots resolve makes, misses, offensive/defensive rebounds, shooting fouls, free throws and and-ones. All randomness is seeded and reproducible.
+- SportVU archive: [neilmj/BasketballData](https://github.com/neilmj/BasketballData), `data/2016.NBA.Raw.SportVU.Game.Logs/12.25.2015.CLE.at.GSW.7z`; usable [Neil Seward mirror](https://raw.githubusercontent.com/sealneaward/nba-movement-data/master/data/12.25.2015.CLE.at.GSW.7z).
+- [Same-game play-by-play CSV](https://raw.githubusercontent.com/sealneaward/nba-movement-data/master/data/events/0021500438.csv), including made/missed shots, free throws, rebounds, turnovers/steals, fouls and period ends.
+- Independent [Basketball Reference box score](https://www.basketball-reference.com/boxscores/201512250GSW.html), checking each active player's FGA, FGM and points and both teams' totals.
+- The archive's MIT notice is retained in `data/SOURCE-LICENSE.txt`. This preserves the repository license, not a claim to ownership of NBA/SportVU data or a separate NBA commercial-data license. Check upstream and NBA/provider terms before redistribution/commercial use. Fonts have their own bundled OFL/DejaVu notices.
 
-Four 12-minute quarters, repeating five-minute overtimes until a winner, automatic quarter transitions, scores, possession, ball handler, court zone, positional matchups, individual/team fouls, six timeouts per team, stamina, floor and bench are tracked. Six personal fouls trigger automatic replacement if a reserve is available. Substitutions and timeouts are manager resource actions and do not consume a hold; timeouts restore some stamina. Both teams are controlled by the user, rather than a hidden opponent making strategic decisions.
-
-Select a historical situation on the left. Read the center scoreboard/court/matchup, select a hold action and offensive/defensive manager layer, inspect expandable arguments and their source tags, then execute. Click any roster/court player for actual season and available WCF per-game stats, current resources and legal substitutions. Undo swaps the previous/current state; save branch retains a snapshot for alternative exploration (30 retained). Autosave and branches stay in localStorage under `courtside.2002.v1`.
-
-## Tactical model and Monte Carlo
-
-Triangle adds .02 to post shot probability; post-up adds .045 for players averaging more than eight rebounds. Motion passing adds .025 to the next shot. Screens add .04, or .01 against switching. Doubling Shaq reduces his shot probability by .09; hack raises the shooting-foul probability to .30. These coefficients, base turnover/steal probabilities, offensive-rebound heuristics, clock consumption and stamina are **estimated**, not historical tactical effects. Stats supply individual shooting/FT rates, rebounding and turnover/steal inputs. Defense uses representative lineup slot matchups, not calibrated defender tracking.
-
-Monte Carlo runs 80 paired full-game samples per tactic and baseline inside a Web Worker, sharing initial seeds. The selected manager setup persists; the first selected hold is then followed by a fixed stochastic shot policy to final. Baseline starts with a pull-up and the existing setup. Expected points count only the first hold (including free throws), while win probability counts full-game wins for the originally possessing team. Small samples and an uncalibrated model limit interpretation; these are not betting predictions or causal estimates.
-
-## Data and historical limits
-
-`src/rosters.json` contains the full 2001–02 team-season rosters (15 Lakers, 14 Kings) and regular-season per-game stats fetched directly from Basketball Reference. WCF per-game stats are included where their series table reports them. `實際` means a sourced historical statistic or the current simulation's objective input state; it never means that a simulated event actually happened.
-
-- https://www.basketball-reference.com/teams/LAL/2002.html
-- https://www.basketball-reference.com/teams/SAC/2002.html
-- https://www.basketball-reference.com/playoffs/2002-nba-western-conference-finals-lakers-vs-kings.html
-- Game 4: https://www.basketball-reference.com/boxscores/200205260LAL.html
-- Game 6: https://www.basketball-reference.com/boxscores/200205310LAL.html
-- Game 7: https://www.basketball-reference.com/boxscores/200206020SAC.html
-
-Game 6's 75–75 start of the fourth and Game 7's 100–100 overtime start are verified from quarter totals. Game 4's 97–99 late possession and Game 7's end-regulation 100–100 are illustrative reconstructions around those actual moments, not play-by-play snapshots. Exact seconds, possession, zones, starting lineups, remaining fouls/timeouts and stamina in historical presets are explicitly **estimated**. The initial floor uses representative rotation players, not the recorded starting five. Full-season availability spans roster changes and does not enforce historical injury restrictions. Stojaković played Games 5, 6 and 7, verified from all three box scores (Game 5: https://www.basketball-reference.com/boxscores/200205280SAC.html); Game 4 lists him as Did Not Dress. He did **not** miss Games 4–6. The Game 4 preset starts Türkoğlu instead, but users may subsequently substitute any season-roster player. Other injury restrictions are not modeled.
-
-Refresh with `python3 fetch_rosters.py` (network required; optional local `lal-source.html`, `sac-source.html`, `wcf-source.html` caches). Game rules are intentionally simplified: no live-ball non-shooting fouls/bonus, technicals, flagrant fouls, backcourt/eight-second violations, goaltending, jump balls, blocked-shot attribution, individual points box score, tactical opponent AI, or official timeout carryover rules. Offensive rebounds reset to the era-appropriate 24 seconds. Foul-out exhaustion does not simulate the rare NBA insufficient-player penalty. A screen/reset allows another hold by the same player, rather than animating a separate live-ball movement.
-
-## Optional Claude rewrite
-
-Set `ANTHROPIC_API_KEY` **only in the server environment**, never in a file or browser. `/api/analyze` rewrites supplied rule pro/con/attack/contingency points; the UI always renders deterministic rules immediately. The response explicitly reports `source: "Claude"` or `source: "規則引擎"`; fallback is HTTP 200. Missing key, network errors, incomplete output, unsupported glyphs, bad shape or invented numbers reject the rewrite. No key or upstream error is sent to the browser. Model defaults to `claude-haiku-5-5` and can be overridden with `ANTHROPIC_MODEL`.
-
-Numbers in AI output must already occur in source facts or rule arguments, including normalized percentages and Chinese numeric forms. This validates numeric grounding, not whether a number was attached to the correct basketball claim. Structured-output schema never has `minItems` above one; local validation enforces card counts. Only current facts and rule cards leave the browser, never saved branches.
-
-## Fonts and tests
-
-Bundled Noto Sans TC 400/600 subsets and retained licenses follow the baseball reference. Rebuild after copy/data changes using `fonttools`:
+Committed `src/tracking-game.json` contains compact holds, snapshots, PBP, chronological replay nodes, player distributions, source hashes and validation; the browser never downloads raw tracking. Raw archives/HTML/CSV/JSON are ignored.
 
 ```sh
-python3 subset_fonts.py /path/to/NotoSansTC.ttf /path/to/DejaVuSans.ttf
+python3 -m pip install --user py7zr
+python3 preprocess_tracking.py --download
+# Subsequent offline runs, using data/raw/{0021500438.json,pbp.csv,box.html}:
+python3 preprocess_tracking.py
 ```
 
-`ui_characters.py` gathers visible sources and decoded roster names. Tests inspect both font cmaps and content hashes. Node tests cover immutable seeded transitions, legal scores, clocks, pass handoffs, resource errors, overtime, a 100-full-game seeded sweep, layered tactics, paired simulations and scenario/branch/autosave flows. Python tests cover font and HTTP/Claude validators without requiring a key. Browser verification uses Playwright from the sibling reference repository and plays a complete game with actual UI clicks.
+Python stdlib plus **py7zr only for extraction**; alternatively extract the archive with the 7z CLI to `data/raw/0021500438.json`. Network failures are errors, never silent substitution of another game. A downloaded raw archive can be hundreds of MB; allow memory for parsing and deduplication.
 
-With the server running and the sibling HS-BaseSta Playwright installation available:
+### Control and alignment, not manual ground truth
+
+Deduplicate overlapping event windows by period and 25 Hz game-clock frame. A controller is the nearest of ten tracked players within **3 feet**, ball height at most **7.5 feet**. Keep runs with at least **4 frames / 0.12 seconds** and bridge same-owner gaps at most **0.64 seconds**. Different teammate controls separated by at most **2 seconds**, with no intervening PBP shot/FT/rebound/turnover/foul/period boundary, infer a pass. Cross-team changes without a PBP turnover remain **unclassified changes**, not invented steals. Other gaps stay unresolved. Court sides are inferred from the majority of matched shot endpoints per team/quarter; zones include backcourt.
+
+Assign PBP shots/turnovers/fouls to the same player's nearest unmatched hold end in the same quarter, from **0.4 seconds before to 5 seconds after** that end. Store the offset and PBP ID. Flight, timing granularity, dead balls, short touches and control ambiguity mean this heuristic can mislabel events. Unmatched PBP is retained as separate replay nodes, so no missing shot/FT disappears from the score. Stable CSV order for equal-clock events matters: NBA event numbers are not always causal order (e.g. rebound/make at Q2 0:41).
+
+Current `data/validation.json`:
+
+| Check | Result |
+|---|---:|
+| Deduplicated tracking frames | 63,908 |
+| Inferred holds | 955 |
+| Inferred passes | 404 |
+| PBP field-goal attempts | 173 |
+| Shot-to-hold temporal matches | 155 / 173 = **89.60%** |
+| Active player FGA/FGM/PTS vs independent box | **22 / 22 = 100%** |
+| Team points vs independent box | **83–89, exact** |
+
+**89.60% is temporal tracking coverage, not a validated pass-detection accuracy.** Box equality validates PBP totals; it does not validate every tracking-inferred controller or shot location. No annotated pass ground truth is available. Shot cells use aligned release-zone estimates and nearest-defender distance at hold start, not exact release-time contest distance. Three-point shot labels come from PBP. All unmatched shots remain in FGA/FGM totals but not location cells.
+
+## Interaction and modeling
+
+One decision is one player's hold. **Replay actual choice** advances chronological holds/PBP without randomness. The start is the first reliable tracked control, not an invented opening tip snapshot. Court markers use the ten observed start coordinates; PBP-only nodes explicitly identify their preceding snapshot. Situation tabs select actual late-fourth-quarter tracking nodes around cited PBP moments.
+
+Choose another named pass, shoot, drive or reset to fork into **simulation**. The real replay node is automatically saved; undo/branch/reload remain local. Once forked, future actual scores and substitutions are never reapplied. Simulated positions are labeled schematic estimates. Historical pass transitions use observed receivers; simulated passes can fail or hit a clock boundary, but always finish the hold and change handler. Lineups in a simulated branch remain the anchor lineup; no invented injuries/stamina/substitution model remains.
+
+**實際** means source-observed counts/coordinates or explicitly tracking-inferred counts: hold-duration samples, pass targets/shares, per-zone choices, PBP FGA/FGM/FT/turnovers. **估計** means modeled values:
+
+- Shot FG in zone × defender-distance cells (`<4`, `4–6`, `≥6` ft) shrinks toward that team's game-wide FG: `(made + 10 × team FG)/(attempts + 10)`. Empty cells use the prior. This simple prior does not represent calibrated shot quality.
+- Turnover rate shrinks with ten holds toward the team's turnovers/holds. FT uses ten attempts at a 0.75 prior. Sample durations are resampled from that player's observed holds (team fallback). Action and receiver policies add small pseudocounts, preserving unseen legal actions. Drive is a move-to-rim abstraction, not a movement physics model; rim-ending shot holds are used to infer drive choices.
+- Shooting-foul probability 0.075; offensive rebound probability 0.25. Backcourt shooting uses 0.15 times the shrunk FG. These are explicitly heuristic, not measured causal effects. Simulated quarter starts and geometry are schematic. Regulation is four 12-minute periods; tied games use five-minute overtimes until decisive.
+- Leverage = the estimated win-probability swing of adding three CLE points divided by its average over tracked holds. Win probability is a logistic score/time heuristic, not a historical fitted win model.
+- Worker Monte Carlo uses paired seeds, rolls to final, compares the selected action with a **model of the observed action**, not its already-realized outcome. Historical fouls/unresolved changes map to reset for the baseline; this is an explicit limitation. Alternatives use up to 16 rollouts; risk remedies up to 12; the selected/baseline use 48. Tiny samples are noisy, not confidence claims.
+- Risk branches retain the first sample state after an empty or turnover result, then rank persistent **defensive** remedies from the original team's perspective. They are representative states, **not conditional averages over all such outcomes**. Pressure multiplies opponent FG by 0.93 but raises foul probability to 0.12; perimeter defense multiplies threes by 0.88 and other shots by 1.04; protect-rebound lowers opponent offensive rebounds to 0.18. All coefficients are estimated, not inferred treatment effects. Clicking a remedy creates that actual simulated post-risk branch. On an offensive-rebound/retained-ball risk these plans apply when that team next defends.
+
+Only this game is used. Small samples, incomplete tracking coverage and heuristic branch behavior make this a decision-exploration prototype, **not a calibrated counterfactual forecast**.
+
+## Optional Claude and fonts
+
+Start the server with `ANTHROPIC_API_KEY` supplied in its environment; never put keys into source or browser storage. `/api/analyze` returns HTTP 200 on rule fallback, so inspect `source` (`Claude` vs `規則引擎`). Supplied evidence numbers are the whitelist: rewritten numbers (including Chinese numerals/percentages), vocabulary, text lengths and bundled glyphs are validated locally. The Anthropic schema uses array `minItems: 1`; local validators enforce count limits. Without a key/upstream success, the same rule arguments remain available. Static serving is allowlisted and raw data/secrets are not served.
+
+Regenerate fonts after UI/data-copy changes (fonttools required):
 
 ```sh
-node verify/browser.mjs
-# Desktop, mobile and full-game PNGs: /home/ubuntu/shots/basketball-*.png
-# Against a key-enabled server, explicitly checks source rather than HTTP status:
-python3 verify/live-claude.py
+python3 subset_fonts.py /path/to/NotoSansTC-variable.ttf /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf
 ```
 
-Verified browser run: 550 UI decisions to a regulation final, Lakers 154–152 Kings, no console errors. This deliberately shot-heavy test is an interaction/invariant check, not a claim of historically calibrated scoring.
+Subset character collection includes source UI strings and tracked player names. CSS content hashes invalidate old font caches.

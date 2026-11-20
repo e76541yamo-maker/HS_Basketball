@@ -1,65 +1,42 @@
-import {copy,play,player,other,bench,substitute,timeout,rngFrom,matchup} from './engine.js';
-
-export const SETS={triangle:'三角進攻',motion:'流動進攻'};
-export const DEFENSES={man:'人盯人',switch:'逢擋必換',double:'包夾歐尼爾',hack:'駭客戰術'};
-export function decisionLayers(s) {
-  if(s.phase!=='playing') return [];
-  return [
-    {id:'offense',label:'進攻體系',team:s.possession,options:Object.entries(SETS).map(([id,label])=>({id,label}))},
-    {id:'defense',label:'防守方案',team:other(s.possession),options:Object.entries(DEFENSES).map(([id,label])=>({id,label}))},
-  ];
-}
-export function manage(state,decision={}) {
-  const s=copy(state);
-  for(const layer of decisionLayers(s)) if(decision[layer.id]) {
-    if(!layer.options.some(o=>o.id===decision[layer.id])) throw new Error('不合法的體系');
-    s[layer.id==='offense'?'sets':'defense'][layer.team]=decision[layer.id];
-  }
-  return s;
-}
-export function execute(s,decision) {
-  let n=manage(s,decision);
-  if(decision.sub) n=substitute(n,...decision.sub);
-  if(decision.timeout) n=timeout(n,decision.timeout);
-  return play(n,decision.action);
-}
+import {DATA,copy,play,simulateHold,policy,player,options,profile,currentHold,realChoice,realLabel,other,winProbability,leverage,ZONES,defenderDistance} from './engine.js';
 const fact=(label,value,source='實際')=>({label,value:String(value),source});
+export const execute=(s,d)=>play(s,typeof d==='string'?d:d.action);
 export function analyze(s,decision={}) {
-  const p=player(s.handler), d=player(matchup(s));
-  const action=decision.action||'pullup';
-  const three=action==='three', post=action==='post', pass=action.startsWith('pass:');
-  const tactic=decision.defense==='hack'?'hack':decision.defense==='double'?'double':decision.offense==='motion'?'motion':three?'three':post?'post':pass?'pass':'normal';
-  const texts={
-    hack:['主動犯規，讓罰球決定這次進攻','可能送分並快速消耗犯規額度','若對手罰球穩定，立即回到人盯人。'],
-    double:['包夾歐尼爾，降低低位命中機會','外圍傳導仍有出手機會；非歐尼爾持球時效果有限','若球轉移到外圍，改用換防。'],
-    motion:['傳導後出手獲得流動進攻加成','傳球也承擔抄截與進攻時間消耗','若進攻時間不足，直接出手。'],
-    three:['外線命中可快速縮小分差','未命中後可能失去球權','若持球者外線效率偏低，優先傳給射手。'],
-    post:['低位利用籃板型長人的近框優勢','包夾與疲勞都會壓低命中率','若包夾形成，傳給空檔隊友。'],
-    pass:['轉移球權，讓具名隊友開始下一回合','傳球不是免費操作，時鐘仍持續走動','若發生抄截，立即轉入防守。'],
-    normal:['依持球者年度命中率尋找出手機會','年度平均並非這次對位的保證','若體力下降，可暫停或換上板凳。'],
-  };
-  const [pro,con,contingency]=texts[tactic];
-  const facts=[fact('年度得分',p.pts_per_g),fact('投籃命中率',p.fg_pct),fact('三分命中率',p.fg3_pct??'無樣本'),fact('罰球命中率',p.ft_pct??'無樣本'),fact('剩餘進攻時間',s.shotClock),fact('體力',s.stamina[p.id].toFixed(1),'估計')];
-  return {summary:`${p.name} 對位 ${d.name}`,pro:[pro],con:[con],attack:['對手可用換防或包夾改變出手條件'],contingency:[contingency],facts,points:[{sign:'+',text:pro,detail:'年度資料作為能力起點；戰術效果、體力與對位修正均為估計。',facts},{sign:'−',text:con,detail:'模型未校準到逐球追蹤；不應把模擬勝率當作史實。',facts:[fact('戰術命中修正上限','0.09','估計')]}]};
+  const id=decision.action==='replay'?realChoice(s):decision.action||realChoice(s),p=player(s.handler),stats=profile(s),d=stats.observed,pass=id.startsWith('pass:'),target=pass?player(id.slice(5)):null;
+  const pro=pass?'轉移持球，讓隊友開始下一段選擇':id==='drive'?'移動到籃下，再以近框分布出手':id==='reset'?'保留持球，等待下一個決策窗口':'依區域與防守距離分布尋找得分';
+  const con=pass?'傳球仍耗時間，也可能發生失誤':'單場樣本有限，命中率已向球隊平均收縮';
+  const contingency=pass?'若傳球失誤，改看防守端補救分支。':'若出手未中，可比較傳球或重整的風險分支。';
+  const facts=[fact('本場持球段',d.holds),fact('本場出手／命中',`${d.fga} / ${d.fg}`),fact('本區距離格出手／命中',`${stats.cell.n} / ${stats.cell.made}`),fact('平均持球秒數',d.durations.length?stats.meanHold.toFixed(2):'無樣本'),fact('收縮後命中率',stats.fg.toFixed(3),'估計'),fact('防守距離英尺',defenderDistance(s).toFixed(2),s.positionsActual?'實際':'估計'),fact('槓桿指數',leverage(s).toFixed(2),'估計')];
+  if(target) facts.push(fact('對此隊友觀測傳球',d.targets[target.id]||0));
+  return {summary:`${p.name}・${ZONES[s.zone]}・真實選擇：${realLabel(s)}`,pro:[pro],con:[con],attack:['對手靠近可改變距離格，小樣本不能證明因果'],contingency:[contingency],facts,points:[{sign:'+',text:pro,detail:'使用本場追蹤推定持球與傳球計數；沒有觀測的隊友也保留平滑權重，避免機率被硬設為零。',facts},{sign:'−',text:con,detail:'命中率以球隊本場平均作為十次出手先驗；原始出手數與平滑後機率分開標示。追蹤缺口不當成失誤。',facts:[fact('收縮先驗出手',10,'估計'),fact('本場失誤',d.turnovers)]}]};
 }
-export function monteCarlo(state,decision={action:'pullup'},count=80,seed=2002) {
-  if(!Number.isInteger(count)||count<1||count>1000) throw new Error('模擬次數超出範圍');
-  const team=state.possession;
-  const run=(first,i)=>{
-    let s=copy(state); s.seed=(seed+i*7919)>>>0;
-    const before=s.score[team];
-    if(s.phase==='playing') s=execute(s,first);
-    const points=s.score[team]-before;
-    let guard=0;
-    while(s.phase==='playing'&&guard++<4000) { const rng=rngFrom(s.seed+17); s=play(s,rng()<.28?'three':rng()<.45?'drive':'pullup'); }
-    if(s.phase!=='final') throw new Error('模擬未結束');
-    return {win:s.score[team]>s.score[other(team)]?1:0,points};
-  };
-  const result={};
-  for(const [name,first] of Object.entries({selected:decision,baseline:{action:'pullup'}})) {
-    let wins=0,points=0;
-    for(let i=0;i<count;i++) { const r=run(first,i); wins+=r.win; points+=r.points; }
-    result[name]={winProbability:wins/count,expectedPoints:points/count};
-  }
-  return {...result,count,seed,source:'估計',delta:result.selected.winProbability-result.baseline.winProbability};
+function rollout(state,action,seed,perspective=state.possession) {
+  let s=copy(state);s.seed=seed;
+  const team=perspective,before=s.score[team];
+  s=simulateHold(s,action);const points=s.score[team]-before,kind=s.last.kind,riskState=copy(s);
+  let turns=0;
+  while(s.phase==='playing'&&turns++<16000) s=simulateHold(s,policy(s));
+  if(s.phase!=='final') throw new Error('模擬未到終場');
+  return {win:s.score[team]>s.score[other(team)]?1:0,points,kind,riskState};
+}
+function evaluate(s,action,count,seed,perspective=s.possession) {
+  const outcomes={score:0,empty:0,turnover:0},risks={};let wins=0,points=0;
+  for(let i=0;i<count;i++) { const r=rollout(s,action,(seed+i*7919)>>>0,perspective);wins+=r.win;points+=r.points;const type=r.kind.includes('失誤')||r.kind.includes('違例')?'turnover':r.points?'score':'empty';outcomes[type]++;if(type!=='score'&&!risks[type]&&r.riskState.phase==='playing')risks[type]=r.riskState; }
+  return {action,winProbability:wins/count,expectedPoints:points/count,outcomes,count,risks};
+}
+export function monteCarlo(s,decision={action:'shoot'},count=48,seed=20151225) {
+  if(!Number.isInteger(count)||count<1||count>300||s.phase!=='playing'||s.recordKind==='event'&&s.mode==='replay') throw new Error('無可比較的持球樣本');
+  const baselineAction=realChoice(s),action=decision.action==='replay'?baselineAction:decision.action;
+  if(!options(s).some(o=>o.id===action)) throw new Error('無效比較選項');
+  const baseline=evaluate(s,baselineAction,count,seed),selected=action===baselineAction?copy(baseline):evaluate(s,action,count,seed);
+  const remedies=options(s).filter(o=>o.id!=='replay'&&o.id!==action).map(o=>({...evaluate(s,o.id,Math.min(16,count),seed),label:o.label})).sort((a,b)=>b.winProbability-a.winProbability||b.expectedPoints-a.expectedPoints);
+  const riskBranches=Object.entries(selected.risks).map(([kind,state])=>{
+    const plans=[['pressure','加壓干擾'],['rebound','保護籃板'],['perimeter','優先守外線']];
+    const ranked=plans.map(([id,label])=>{
+      const n=copy(state);n.defensePlan={id,team:s.possession};
+      return {id,label,state:n,...evaluate(n,policy(n),Math.min(12,count),seed,s.possession)};
+    }).sort((a,b)=>b.winProbability-a.winProbability);
+    return {kind,state,count:selected.outcomes[kind],remedies:ranked};
+  });
+  return {selected,baseline,count,seed,source:'估計',delta:selected.winProbability-baseline.winProbability,leverage:leverage(s),remedies:remedies.slice(0,3),riskBranches,baselineLabel:realLabel(s)};
 }

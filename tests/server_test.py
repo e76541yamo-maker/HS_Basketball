@@ -14,9 +14,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 import server
 
-POINTS = {'pro': ['年度資料作為能力起點'], 'con': ['年度平均並非這次對位的保證'],
-          'attack': ['對手可用換防或包夾改變出手條件'], 'contingency': ['若體力下降，可暫停或換上板凳。']}
-PAYLOAD = {'facts': {'score': {'LAL': 75, 'SAC': 75}, 'rate': .469}, 'points': POINTS}
+POINTS = {'pro': ['轉移持球，讓隊友開始下一段選擇'], 'con': ['單場樣本有限，命中率已向球隊平均收縮'],
+          'attack': ['對手靠近可改變距離格，小樣本不能證明因果'], 'contingency': ['若傳球失誤，改看防守端補救分支。']}
+PAYLOAD = {'facts': {'score': {'CLE': 83, 'GSW': 89}, 'rate': .469}, 'points': POINTS}
 
 
 class AnalysisTest(unittest.TestCase):
@@ -69,7 +69,7 @@ class HTTPTest(unittest.TestCase):
         cls.http.shutdown(); cls.http.server_close(); cls.thread.join()
 
     def test_static_allowlist_and_status(self):
-        for path in ('/', '/src/engine.js', '/src/rosters.json', '/src/branch-tree.js', '/icons/noto-tc-400.ttf', '/api/ai-status'):
+        for path in ('/', '/src/engine.js', '/src/tracking-game.json', '/src/branch-tree.js', '/icons/noto-tc-400.ttf', '/api/ai-status'):
             with urllib.request.urlopen(self.url + path) as response:
                 self.assertEqual(response.status, 200)
                 self.assertEqual(response.headers['X-Content-Type-Options'], 'nosniff')

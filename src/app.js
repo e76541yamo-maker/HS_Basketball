@@ -1,79 +1,67 @@
-import {TEAMS,copy,player,other,options,substitute,timeout,matchup,bench} from './engine.js';
-import {analyze,execute,decisionLayers,SETS,DEFENSES} from './manager-options.js';
+import {DATA,TEAMS,copy,player,options,play,currentHold,currentEvent,realLabel,profile,matchup,defenderDistance,leverage,ZONES} from './engine.js';
+import {analyze} from './manager-options.js';
 import {MOMENTS,momentState} from './scenarios.js';
-import {restore,addBranch,STORAGE_KEY} from './branch-tree.js';
+import {STORAGE_KEY,restore,addBranch} from './branch-tree.js';
 
-const $=s=>document.querySelector(s);
-const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const names={LAL:'洛杉磯湖人',SAC:'沙加緬度國王'};
-const short={LAL:'湖人',SAC:'國王'};
-const pct=x=>x==null?'無樣本':(x*100).toFixed(1)+'%';
-const clock=x=>`${Math.floor(x/60)}:${Math.floor(x%60).toString().padStart(2,'0')}${x%1?'.'+Math.round(x%1*10):''}`;
-let state=momentState('start'),branches=[],previous=null,selected='pullup',simulation=null,worker=null,request=0,aiRequest=0;
-try { const saved=restore(localStorage.getItem(STORAGE_KEY)); if(saved) ({state,branches,previous}=saved); } catch {}
-let decision={};
-let aiEnabled=false;
-fetch('/api/ai-status').then(r=>r.json()).then(data=>{ aiEnabled=Boolean(data.enabled); if(aiEnabled) analysis(); }).catch(()=>{});
-function save() { try { localStorage.setItem(STORAGE_KEY,JSON.stringify({state,branches,previous})); $('#save-status').textContent='本機已儲存'; } catch { $('#save-status').textContent='儲存空間不足'; } }
-function resetSelection() { selected='pullup'; decision={}; simulation=null; request++; }
-function update(next) { previous=copy(state); state=next; resetSelection(); save(); render(); }
-function facts(rows) { return `<div class="fact-chips">${rows.map(f=>`<span class="fact-chip ${f.source==='估計'?'est':''}"><b>${f.source}</b> ${esc(f.label)} ${esc(f.value)}</span>`).join('')}</div>`; }
-function analysis() {
-  const a=analyze(state,{...decision,action:selected});
-  $('#source').textContent='規則引擎';
-  $('#analysis').innerHTML=`<p class="analysis-context">${esc(a.summary)}</p><div class="argument-grid">${a.points.map(p=>`<details class="argument"><summary><span class="sign ${p.sign==='−'?'negative':''}">${p.sign}</span>${esc(p.text)}</summary><p>${esc(p.detail)}</p><details><summary>查看引用資料</summary>${facts(p.facts)}</details></details>`).join('')}</div><p class="contingency"><b>備案</b> ${esc(a.contingency[0])}</p>`;
-  const id=++aiRequest;
-  if(!aiEnabled) return;
-  fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({facts:{quarter:state.quarter,clock:state.clock,shotClock:state.shotClock,score:state.score,action:selected,stats:a.facts},points:{pro:a.pro,con:a.con,attack:a.attack,contingency:a.contingency}})})
-    .then(r=>r.json()).then(data=>{ if(id!==aiRequest||data.source!=='Claude') return; $('#source').textContent='Claude'; const p=document.createElement('p'); p.className='ai-rewrite'; p.textContent=data.points.pro[0]+'；'+data.points.con[0]; $('#analysis').append(p); }).catch(()=>{});
+const $=id=>document.getElementById(id),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const teamName={CLE:'克里夫蘭騎士',GSW:'金州勇士'},clock=s=>`${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`,pct=n=>(n*100).toFixed(1)+'%';
+let saved;try {saved=restore(localStorage.getItem(STORAGE_KEY));}catch{}
+let state=saved?.state||momentState('start'),previous=saved?.previous||null,branches=saved?.branches||[],action='replay',revision=0,worker,request=0,simulation=null;
+const chips=facts=>facts.map(f=>`<span class="fact-chip ${f.source==='估計'?'est':''}"><b>${esc(f.source)}</b> ${esc(f.label)}：${esc(f.value)}</span>`).join('');
+function persist() {try {localStorage.setItem(STORAGE_KEY,JSON.stringify({state,previous,branches}));$('save-status').textContent='已儲存在此瀏覽器';}catch {$('save-status').textContent='儲存空間不足・請勿關閉頁面';}}
+function message(s) {$('notice').textContent=s;}
+function transition(next,label) {previous=copy(state);if(state.mode==='replay'&&next.mode==='simulation')branches=addBranch(branches,state,'替代選擇前的實際節點');state=next;simulation=null;revision++;action=options(state)[0]?.id||'';persist();render();message(label);}
+function score() {
+ $('scoreboard').innerHTML=`<div class="score-team ${state.possession==='CLE'?'with-ball':''}"><small>CLE · 客場</small><b>騎士</b><strong>${state.score.CLE}</strong></div><div class="score-time"><span>${state.phase==='final'?'終場':`第 ${state.quarter} 節`}</span><b>${clock(state.clock)}</b><small>進攻 <em>${state.shotClock.toFixed(1)}</em></small></div><div class="score-team ${state.possession==='GSW'?'with-ball':''}"><small>GSW · 主場</small><b>勇士</b><strong>${state.score.GSW}</strong></div>`;
+ const h=currentHold(state),e=currentEvent(state);
+ $('situation').innerHTML=`<div class="section-title"><h2>${state.mode==='replay'?'實際比賽重播':'替代策略分支'}</h2><span class="live-dot">${state.phase==='final'?'比賽結束':`第 ${state.turn} 次持球決策`}</span></div><p class="scenario-note">2015 年 12 月 25 日 · CLE @ GSW · 節點 ${state.cursor+1} / ${DATA.timeline.length}</p>`;
+ $('court').innerHTML=`<div class="court-caption"><span>${state.positionsActual?'實際・持球起點的十人座標':state.mode==='replay'?'實際・前一持球快照，非事件當下':'估計・分支示意座標'}</span><span>球場 94 × 50 英尺</span></div><div class="court-surface"><svg viewBox="0 0 940 500" preserveAspectRatio="none" aria-hidden="true"><path d="M470 0V500M0 170H190V330H0M940 170H750V330H940"/><rect x="3" y="3" width="934" height="494"/><circle cx="470" cy="250" r="60"/><circle cx="190" cy="250" r="60"/><circle cx="750" cy="250" r="60"/><circle cx="52" cy="250" r="8"/><circle cx="888" cy="250" r="8"/><path d="M0 30H140Q430 250 140 470H0M940 30H800Q510 250 800 470H940"/></svg>${state.positions.map(([id,x,y])=>`<button class="court-player ${id===state.handler?'ball-handler':''} ${player(id).team.toLowerCase()}" data-player="${id}" style="left:${4+x/94*92}%;top:${8+y/50*84}%" aria-label="${esc(player(id).name)}"><span>${esc(player(id).jersey)}</span><small>${esc(player(id).name.split(' ').at(-1))}</small></button>`).join('')}</div><div class="court-footer"><span class="ball-key">● 持球者 · ${esc(player(state.handler).name)}</span><span>${state.possession} 攻向${state.basketX<47?'左':'右'}籃框</span></div>`;
+ const defender=matchup(state);
+ $('matchup').innerHTML=`<button class="matchup-card" data-player="${state.handler}"><small>持球 · ${ZONES[state.zone]}</small><b>${esc(player(state.handler).name)}</b><span>${h?`本段 ${h.duration.toFixed(2)} 秒・${esc(realLabel(state))}`:esc(realLabel(state))}</span></button><span class="versus">對位</span><button class="matchup-card" data-player="${defender}"><small>最近防守者</small><b>${esc(player(defender).name)}</b><span>${defenderDistance(state).toFixed(2)} 英尺 · ${state.positionsActual?'實際':'快照／估計'}</span></button>`;
+ $('layers').innerHTML=`<div class="observed"><span class="tag ${state.mode==='simulation'?'est':''}">${state.mode==='replay'?'實際紀錄':'分支起點'}</span> ${esc(realLabel(state))}<p class="muted">${e?'逐球事件獨立呈現，確保罰球、籃板與比分不遺漏。':'依實際選擇繼續會保留史實；其他動作立即分岔，不會再套用未來史實。'}</p></div><div class="leverage"><b>${leverage(state).toFixed(2)}×</b><span>槓桿指數 <i>估計</i></span><small>增加三分的勝率擺幅／全場平均</small></div>`;
+}
+function argumentsView() {
+ if(state.phase==='final') {$('analysis').innerHTML='<p>已到終場。選擇左側時刻，或返回已儲存分支。</p>';$('source').textContent='規則引擎';return;}
+ const a=analyze(state,{action});$('source').textContent='規則引擎';
+ $('analysis').innerHTML=`<p class="analysis-context">${esc(a.summary)}</p><div class="argument-grid">${a.points.map(p=>`<details class="argument"><summary><span class="sign ${p.sign==='−'?'negative':''}">${p.sign}</span>${esc(p.text)}</summary><p>${esc(p.detail)}</p>${chips(p.facts)}</details>`).join('')}</div><p class="contingency"><b>對手回應</b>${esc(a.attack[0])}</p><p class="contingency"><b>風險補救</b>${esc(a.contingency[0])}</p><button id="rewrite" class="rewrite">Claude 潤飾論點（可選）</button><div id="ai-points"></div>`;
+ $('rewrite').onclick=async()=>{
+  const rev=revision,chosen=action,button=$('rewrite');button.disabled=true;button.textContent='正在潤飾…';
+  try {const response=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({facts:{player:player(state.handler).name,score:state.score,facts:a.facts},points:{pro:a.pro,con:a.con,attack:a.attack,contingency:a.contingency}})});const r=await response.json();if(rev!==revision||chosen!==action)return;$('source').textContent=r.source||'規則引擎';$('ai-points').innerHTML=r.source==='Claude'?Object.entries(r.points).map(([k,ps])=>`<p class="contingency"><b>${({pro:'支持',con:'代價',attack:'對手',contingency:'補救'})[k]}</b>${ps.map(esc).join('；')}</p>`).join(''):'<p class="muted">未啟用或驗證未通過，保留上方規則論點。</p>';}
+  catch {if(rev===revision)message('分析連線失敗，保留規則引擎。');}finally {button.disabled=false;button.textContent='Claude 潤飾論點（可選）';}
+ };
 }
 function render() {
-  const s=state, p=player(s.handler), d=player(matchup(s)), m=MOMENTS.find(m=>m.id===s.moment)||MOMENTS[0], final=s.phase==='final';
-  $('#scenarios').innerHTML=MOMENTS.map(m=>`<button data-moment="${m.id}" class="scenario-card ${m.id===s.moment?'active':''}"><small>${m.date}</small><strong>${m.label}</strong><span>${m.detail}</span></button>`).join('');
-  $('#branches').innerHTML=branches.length?branches.map((b,i)=>`<button class="branch-card" data-load="${i}">${esc(b.name)}</button>`).join(''):'<p class="muted">在此保留另一種可能。</p>';
-  $('#situation').innerHTML=`<div class="section-title"><div><p class="eyebrow">${final?'比賽結束':'目前局面'} / 第 ${s.turn} 回合</p><h2>${m.label}</h2></div><span class="live-dot">${final?'終場':'決策中'}</span></div>${m.url?`<p class="scenario-note"><a href="${m.url}" target="_blank" rel="noopener">史實比分來源 ↗</a> · 秒數、持球與資源為估計重建</p>`:''}`;
-  $('#scoreboard').innerHTML=`<div class="score-team ${s.possession==='LAL'?'with-ball':''}"><small>洛杉磯</small><b>湖人</b><strong>${s.score.LAL}</strong></div><div class="score-time"><span>${final?'終場':s.quarter>4?'延長 '+(s.quarter-4):'第 '+s.quarter+' 節'}</span><b>${clock(s.clock)}</b><small>進攻 <em>${Math.ceil(s.shotClock)}</em></small></div><div class="score-team ${s.possession==='SAC'?'with-ball':''}"><small>沙加緬度</small><b>國王</b><strong>${s.score.SAC}</strong></div>`;
-  const spots=[[50,67],[24,53],[76,53],[28,23],[70,24]], h=s.lineups[s.possession].indexOf(s.handler);
-  $('#court').innerHTML=`<div class="court-caption"><span>${short[s.possession]}持球 · ${s.zone}</span><span>${SETS[s.sets[s.possession]]} / ${DEFENSES[s.defense[other(s.possession)]]}</span></div><div class="court-surface"><svg viewBox="0 0 600 340" aria-hidden="true"><rect x="20" y="15" width="560" height="310" rx="2"/><path d="M20 325H580M215 15V160H385V15M215 160A85 85 0 0 0 385 160M50 15V72A250 250 0 0 0 550 72V15M270 40H330"/><circle cx="300" cy="55" r="13"/><path d="M250 325A50 50 0 0 1 350 325"/></svg>${s.lineups[s.possession].map((id,i)=>`<button class="court-player ${i===h?'ball-handler':''}" data-player="${id}" style="left:${spots[i][0]}%;top:${spots[i][1]}%" aria-label="${esc(player(id).name)}${i===h?' 持球':''}"><span>${i===h?'球':i+1}</span><small>${esc(player(id).name.split(' ').at(-1))}</small></button>`).join('')}<span class="court-watermark">西區決賽・2002</span></div><div class="court-footer"><span class="ball-key">● 持球者</span><span>場區示意，非追蹤座標</span></div>`;
-  $('#matchup').innerHTML=`<button class="matchup-card" data-player="${p.id}"><small>持球者 / ${short[s.possession]}</small><b>${esc(p.name)}</b><span>得分 ${p.pts_per_g} · 投籃 ${pct(p.fg_pct)} <i>實際</i></span></button><span class="versus">對位</span><button class="matchup-card" data-player="${d.id}"><small>防守者 / ${short[other(s.possession)]}</small><b>${esc(d.name)}</b><span>抄截 ${d.stl_per_g} · 阻攻 ${d.blk_per_g} <i>實際</i></span></button>`;
-  $('#actions').innerHTML=options(s).map(o=>`<button data-action="${o.id}" class="action ${o.id===selected?'selected':''}" aria-pressed="${o.id===selected}">${esc(o.label)}</button>`).join('');
-  $('#layers').innerHTML=decisionLayers(s).map(layer=>`<label>${layer.label} · ${short[layer.team]}<select data-layer="${layer.id}">${layer.options.map(o=>`<option value="${o.id}" ${(decision[layer.id]||s[layer.id==='offense'?'sets':'defense'][layer.team])===o.id?'selected':''}>${o.label}</option>`).join('')}</select></label>`).join('');
-  $('#execute').disabled=final; $('#simulate').disabled=final; $('#undo').disabled=!previous;
-  $('#notice').textContent=s.last?.kind==='start'?'選擇持球動作，再執行決策。':`本次結果：${s.last?.kind} · 得 ${s.last?.points||0} 分 · 經過 ${s.last?.seconds||0} 秒`;
-  $('#simulation').innerHTML=simulation?`<div class="simulation-result"><b>模擬比較 <span class="tag est">估計</span></b><p>${simulation.count} 次完整比賽・相同種子</p><div><span>所選策略<br><strong>${pct(simulation.selected.winProbability)}</strong> 勝率<br>${simulation.selected.expectedPoints.toFixed(2)} 預期得分</span><span>基準急停<br><strong>${pct(simulation.baseline.winProbability)}</strong> 勝率<br>${simulation.baseline.expectedPoints.toFixed(2)} 預期得分</span></div><small>預期得分只計本次持球；勝率推演到終場。樣本誤差與模型偏差仍存在。</small></div>`:'';
-  $('#resources').innerHTML=['LAL','SAC'].map(t=>`<section class="resource-section"><div class="team-heading"><span class="team-symbol ${t.toLowerCase()}">${short[t][0]}</span><div><h3>${names[t]}</h3><small>團隊犯規 ${s.teamFouls[t]} · 暫停 ${s.timeouts[t]}</small></div><button data-timeout="${t}" ${!s.timeouts[t]||final?'disabled':''}>暫停</button></div><p class="roster-label">場上陣容 <span>體力為估計</span></p>${s.lineups[t].map(id=>rosterRow(id,s)).join('')}<details class="bench"><summary>板凳球員 · ${bench(s,t).length} 人可用</summary>${TEAMS[t].filter(p=>!s.lineups[t].includes(p.id)).map(p=>rosterRow(p.id,s)).join('')}</details></section>`).join('');
-  $('#log').innerHTML=[...s.log].reverse().map(e=>`<li>第 ${e.turn} 回合 · ${esc(e.kind)} · ${e.points} 分</li>`).join('');
-  document.querySelectorAll('.resource-section').forEach((section,i)=>{
-    const t=['LAL','SAC'][i];
-    section.insertAdjacentHTML('beforeend',`<details class="guide resource-guide"><summary>換人與暫停的取捨</summary><details><summary>＋ 讓板凳分擔負荷</summary><p>場下恢復體力，替補立即承接原對位；換下的球員可以再上場。</p><details><summary>查看引用資料</summary>${facts([{label:'板凳可用',value:bench(s,t).length,source:'實際'},{label:'體力恢復',value:'每秒 0.09',source:'估計'}])}</details></details><details><summary>− 暫停有限，換人改變投籃能力</summary><p>暫停恢復體力但不重設進攻時間；犯滿球員不可再上場。</p><details><summary>查看引用資料</summary>${facts([{label:'剩餘暫停',value:s.timeouts[t],source:'實際'},{label:'暫停體力恢復',value:8,source:'估計'}])}</details></details><p>備案：若沒有暫停，從球員資料選擇替補，保留末節可用資源。</p></details>`);
-  });
-  analysis();
-}
-function rosterRow(id,s) { const p=player(id),st=s.stamina[id]; return `<button class="roster-row" data-player="${id}"><span class="player-initial">${esc(p.name.split(' ').at(-1)[0])}</span><span><b>${esc(p.name)}</b><small>${p.pts_per_g} 分 · ${p.trb_per_g} 籃板 · 犯規 ${s.fouls[id]||0}</small><span class="stamina-track"><span style="width:${st}%"></span></span></span><em>${Math.round(st)}</em></button>`; }
-function openPlayer(id) {
-  const p=player(id),t=id.startsWith('LAL')?'LAL':'SAC',on=state.lineups[t].includes(id),s=state;
-  $('#player-detail').innerHTML=`<p class="eyebrow">${names[t]} · ${on?'場上':'板凳'}</p><h2>${esc(p.name)}</h2><p class="muted">2001–02 例行賽・每場平均</p><div class="player-stats">${[['得分',p.pts_per_g],['籃板',p.trb_per_g],['助攻',p.ast_per_g],['抄截',p.stl_per_g],['阻攻',p.blk_per_g],['失誤',p.tov_per_g],['投籃',pct(p.fg_pct)],['三分',pct(p.fg3_pct)],['罰球',pct(p.ft_pct)]].map(([k,v])=>`<div><small>${k} <i>實際</i></small><strong>${v??'無樣本'}</strong></div>`).join('')}</div><p>體力 <b>${Math.round(s.stamina[id])}</b> <span class="tag est">估計</span> · 個人犯規 ${s.fouls[id]||0} <span class="tag">目前狀態</span></p>${p.wcf?`<p class="wcf-stats">2002 西區決賽 <i>實際</i><br>出賽 ${p.wcf.g} · 得分 ${p.wcf.pts_per_g} · 籃板 ${p.wcf.trb_per_g} · 助攻 ${p.wcf.ast_per_g}</p>`:''}<p><a href="${p.url}" target="_blank" rel="noopener">Basketball Reference 年度資料 ↗</a></p>${!on&&(s.fouls[id]||0)<6&&s.phase==='playing'?`<label>替換場上球員<select id="sub-out">${s.lineups[t].map(q=>`<option value="${q}">${esc(player(q).name)}</option>`).join('')}</select></label><button id="sub-in" class="primary" data-team="${t}" data-in="${id}">執行換人</button>`:''}${p.name.includes('Stojak')?'<p class="scenario-note">實際：西區決賽只在第五、六、七戰出賽，第四戰未登錄上場。模型不限制逐日傷勢可用性。</p>':''}`;
-  $('#player-dialog').showModal();
+ score();const opts=options(state);if(!opts.some(o=>o.id===action))action=opts[0]?.id||'';
+ $('scenarios').innerHTML=MOMENTS.map(m=>`<button class="scenario-card ${state.moment===m.id?'active':''}" data-moment="${m.id}"><small>2015 · CLE @ GSW</small><strong>${esc(m.label)}</strong><span>${esc(m.detail)}</span></button>`).join('');
+ $('branches').innerHTML=branches.length?branches.map((b,i)=>`<button class="branch-card" data-branch="${i}">${esc(b.name)}<small> · ${b.state.mode==='replay'?'實際':'估計'}</small></button>`).join(''):'<p class="muted">替代動作會自動保留實際起點</p>';
+ $('actions').innerHTML=opts.map(o=>`<button class="action ${o.id===action?'selected':''}" data-action="${o.id}">${esc(o.label)}</button>`).join('');
+ $('execute').disabled=!opts.length;$('simulate').disabled=!opts.length||state.mode==='replay'&&state.recordKind==='event';$('undo').disabled=!previous;
+ $('resources').innerHTML=['CLE','GSW'].map(t=>`<section class="resource-section"><div class="team-heading"><span class="team-symbol ${t.toLowerCase()}">${t}</span><div><h3>${teamName[t]}</h3><small>本場追蹤與逐球分布</small></div></div>${TEAMS[t].map(p=>{const d=DATA.distributions[p.id];return `<button class="roster-row ${state.lineups[t].includes(p.id)?'on-floor':''}" data-player="${p.id}"><span class="jersey">${esc(p.jersey)}</span><span><b>${esc(p.name)}</b><small>${d.holds} 持球 · ${d.fg}/${d.fga} 命中／出手</small></span><i>${state.lineups[t].includes(p.id)?'場上':'場下'}</i></button>`;}).join('')}</section>`).join('');
+ $('log').innerHTML=`<li>${esc(state.last.kind)} · CLE ${state.score.CLE}：GSW ${state.score.GSW}</li>`;
+ $('simulation').innerHTML='';argumentsView();
 }
 document.addEventListener('click',e=>{
-  const b=e.target.closest('button'); if(!b) return;
-  try {
-    if(b.dataset.moment) update(momentState(b.dataset.moment));
-    else if(b.dataset.load!==undefined) update(copy(branches[+b.dataset.load].state));
-    else if(b.dataset.action) { selected=b.dataset.action; simulation=null; request++; render(); }
-    else if(b.dataset.player) openPlayer(b.dataset.player);
-    else if(b.dataset.timeout) update(timeout(state,b.dataset.timeout));
-    else if(b.id==='execute') update(execute(state,{...decision,action:selected}));
-    else if(b.id==='undo'&&previous) { const old=state; state=previous; previous=old; resetSelection(); save(); render(); }
-    else if(b.id==='branch') { branches=addBranch(branches,state); save(); render(); }
-    else if(b.id==='sub-in') { $('#player-dialog').close(); update(substitute(state,b.dataset.team,$('#sub-out').value,b.dataset.in)); }
-    else if(b.id==='close-player') $('#player-dialog').close();
-    else if(b.id==='simulate') {
-      if(!worker) { worker=new Worker('/src/simulation-worker.js',{type:'module'}); worker.onmessage=({data})=>{ if(data.id!==request) return; if(data.error) $('#notice').textContent=data.error; else { simulation=data.result; render(); } $('#simulate').disabled=state.phase==='final'; }; worker.onerror=()=>{ $('#notice').textContent='模擬無法完成，請重新載入。'; $('#simulate').disabled=false; }; }
-      $('#simulate').disabled=true; $('#notice').textContent='背景推演中，仍可繼續決策。'; worker.postMessage({id:++request,state,decision:{...decision,action:selected},count:80,seed:2002});
-    }
-  } catch { $('#notice').textContent='此操作目前無法執行。'; }
+ const b=e.target.closest('button');if(!b)return;
+ if(b.dataset.action){action=b.dataset.action;simulation=null;render();}
+ if(b.dataset.moment)transition(momentState(b.dataset.moment),'已載入實際時刻。');
+ if(b.dataset.branch!==undefined)transition(copy(branches[Number(b.dataset.branch)].state),'已返回分支。');
+ if(b.dataset.player) {
+  const id=b.dataset.player,p=player(id),d=DATA.distributions[id],stats=profile(state,id);
+  $('player-detail').innerHTML=`<p class="eyebrow">${p.team} · ${esc(p.position)} · ${esc(p.jersey)}</p><h2>${esc(p.name)}</h2><p class="muted">單場資料，不代表長期能力。</p>${chips([{source:'實際',label:'持球段',value:d.holds},{source:'實際',label:'命中／出手',value:`${d.fg} / ${d.fga}`},{source:'實際',label:'得分／失誤',value:`${d.points} / ${d.turnovers}`},{source:'實際',label:'平均持球秒',value:d.durations.length?stats.meanHold.toFixed(2):'無樣本'},{source:'估計',label:'目前區域距離格收縮命中率',value:pct(stats.fg)}])}<h3>實際・傳球目標分布</h3>${Object.entries(d.targets).sort((a,b)=>b[1]-a[1]).map(([id,n])=>`<p>${esc(player(id).name)} <b>${n}</b> 次 · ${pct(n/Math.max(1,Object.values(d.targets).reduce((a,b)=>a+b,0)))}</p>`).join('')||'<p>沒有觀測到傳球</p>'}<h3>實際・持球秒數分布</h3><p>${[['短於一秒',d.durations.filter(n=>n<1).length],['一至三秒',d.durations.filter(n=>n>=1&&n<3).length],['三秒以上',d.durations.filter(n=>n>=3).length]].map(([k,n])=>`${k}：${n}`).join('／')}</p><p class="muted">空白區域以球隊命中率平滑；場下球員沒有目前防守距離，使用六英尺估計。</p>`;$('player-dialog').showModal();
+ }
+ if(b.dataset.remedy&&simulation) {
+  const [i,j]=b.dataset.remedy.split(':').map(Number),r=simulation.riskBranches[i].remedies[j];branches=addBranch(branches,state,'風險前的決策');transition(copy(r.state),'已建立風險後的補救分支：'+r.label+'（估計・持續防守方針）。');
+ }
 });
-document.addEventListener('change',e=>{ if(e.target.dataset.layer) { decision[e.target.dataset.layer]=e.target.value; simulation=null; request++; $('#simulation').innerHTML=''; $('#simulate').disabled=state.phase==='final'; analysis(); } });
-$('#player-dialog').addEventListener('click',e=>{ if(e.target===$('#player-dialog')) $('#player-dialog').close(); });
+$('close-player').onclick=()=>$('player-dialog').close();
+$('execute').onclick=()=>{try {transition(play(state,action),action==='replay'?'已依實際紀錄前進。':'已建立分布模擬分支；未來不再套用史實。');}catch(e){message(e.message);}};
+$('undo').onclick=()=>{if(previous){const n=previous;previous=copy(state);state=n;simulation=null;revision++;persist();render();message('已復原；再次按下可返回。');}};
+$('branch').onclick=()=>{branches=addBranch(branches,state);persist();render();message('已儲存分支。');};
+$('simulate').onclick=()=>{
+ if(!worker){worker=new Worker('/src/simulation-worker.js',{type:'module'});worker.onerror=()=>{message('背景模擬失敗，請重新整理。');$('simulate').disabled=false;};}
+ const id=++request,rev=revision,chosen=action;$('simulate').disabled=true;message('以相同種子對照實際動作模型，並排序風險後補救…');
+ worker.onmessage=({data})=>{if(data.id!==id||rev!==revision||chosen!==action)return;$('simulate').disabled=false;if(data.error){message(data.error);return;}simulation=data.result;const m=simulation;
+ $('simulation').innerHTML=`<div class="simulation-result"><h3>估計・配對蒙地卡羅 ${m.count} 次</h3><p>本次勝率 <b>${pct(m.selected.winProbability)}</b> ／實際動作模型 <b>${pct(m.baseline.winProbability)}</b></p><p>差異 ${(m.delta*100).toFixed(1)} 個百分點 · 本次持球期望得分 ${m.selected.expectedPoints.toFixed(2)}</p><small>比較視角：${teamName[state.possession]}。基準：${esc(m.baselineLabel)}，不是已發生的得失分。少量樣本的排名會波動。</small><div class="outcome-grid">${Object.entries(m.selected.outcomes).map(([k,n])=>`<span>${({score:'得分',empty:'未得分',turnover:'失誤／違例'})[k]}<b>${n} / ${m.count}</b></span>`).join('')}</div><h3>替代動作排序 <i>估計</i></h3>${m.remedies.map(r=>`<p>${esc(r.label)} · ${pct(r.winProbability)}（${r.count} 次）</p>`).join('')}${m.riskBranches.map((risk,i)=>`<details class="risk" open><summary>風險：${risk.kind==='turnover'?'失誤／違例':'未得分'} · ${risk.count}/${m.count}</summary><p class="muted">以第一個出現此結果的種子狀態續推，不是此類風險的條件平均。防守補救係數為估計。</p>${risk.remedies.map((r,j)=>`<button data-remedy="${i}:${j}">${j+1}. ${esc(r.label)} · ${pct(r.winProbability)}（${r.count} 次）↗</button>`).join('')}</details>`).join('')}</div>`;message('比較完成。補救按鈕可建立風險後的實際模擬分支。');};
+ worker.postMessage({id,state,decision:{action},count:48,seed:20151225});
+};
 render();

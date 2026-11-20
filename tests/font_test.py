@@ -50,8 +50,8 @@ class FontCoverageTest(unittest.TestCase):
                 digest = hashlib.sha256((ROOT / 'icons' / name).read_bytes()).hexdigest()[:12]
                 self.assertIn(f"url('/icons/{name}?v={digest}')", stylesheet)
 
-    def test_roster_accents_are_in_the_ui_character_set(self):
-        self.assertTrue({ord(c) for c in 'Peja Stojaković Hedo Türkoğlu'} <= ui_characters())
+    def test_tracking_players_are_in_the_ui_character_set(self):
+        self.assertTrue({ord(c) for c in 'LeBron James Stephen Curry Anderson Varejao'} <= ui_characters())
 
     def test_bundled_weights_cover_ui_source(self):
         for weight in (400, 600):

@@ -22,8 +22,9 @@ TEAM = {1610612739: 'CLE', 1610612744: 'GSW'}
 def elapsed(q, clock):
     return (q-1)*720 + 720-clock
 
-def zone(x, y):
-    d = min(math.hypot(x-5.25, y-25), math.hypot(x-88.75, y-25))
+def zone(x, y, basket=None):
+    d = math.hypot(x-basket,y-25) if basket is not None else min(math.hypot(x-5.25, y-25), math.hypot(x-88.75, y-25))
+    if basket is not None and ((basket<47 and x>47) or (basket>47 and x<47)): return 'backcourt'
     return 'rim' if d < 8 else 'three' if d >= 23.75 or (y < 3 or y > 47) and d > 22 else 'mid'
 
 def snapshot(m):
@@ -79,7 +80,7 @@ def build(raw, pbp, box_html):
         if kind in (1,2): box_counts[pid]['fga']+=1; box_counts[pid]['fg']+=kind==1; box_counts[pid]['pts']+=e['points']
         if kind==3: box_counts[pid]['pts']+=e['points']
         events.append(e)
-    events.sort(key=lambda e:(e['t'],e['id']))
+    events.sort(key=lambda e:e['t'])
     # Infer stable control from all 25Hz samples, not event-window duplicates.
     runs=[]; active=None
     for m,t in zip(frames,times):
@@ -106,11 +107,28 @@ def build(raw, pbp, box_html):
             e['alignmentOffset']=round(e['t']-h['end'],2)
     for i,h in enumerate(holds[:-1]):
         n=holds[i+1]
-        boundary=any(h['end']-.01 <= e['t'] <= n['t']+.01 and e['type'] in (1,2,3,4,5,6,13) for e in events)
+        boundary=any(h['t']-.01 <= e['t'] <= n['t']+.01 and e['type'] in (1,2,3,4,5,6,13) for e in events)
         if h['event'] is None and not boundary and h['q']==n['q'] and 0 <= n['t']-h['end']<=2 and h['player']!=n['player']:
             h['endKind']='pass' if h['team']==n['team'] else 'change';h['target']=n['player']
     for h in holds:
         if h['endKind']=='reset' and h['clock']-h['duration']<.3: h['endKind']='period'
+    basket_votes=defaultdict(list)
+    for e in events:
+        if e['type'] in (1,2) and e['matched']:
+            r=next(r for r in runs if round(r['t'],2)==holds[e['hold']]['t'] and r['player']==e['player'])
+            p=next(p for p in r['endFrame'][5] if str(p[1])==e['player'])
+            basket_votes[(e['team'],e['q'])].append(5.25 if p[2]<47 else 88.75)
+    for h in holds:
+        votes=basket_votes[(h['team'],h['q'])]
+        h['basketX']=Counter(votes).most_common(1)[0][0]
+        h['zone']=zone(h['x'],h['y'],h['basketX'])
+        r=next(r for r in runs if round(r['t'],2)==h['t'] and r['player']==h['player'])
+        p=next(p for p in r['endFrame'][5] if str(p[1])==h['player'])
+        h['endZone']=zone(p[2],p[3],h['basketX'])
+    for e in events:
+        if e['type'] in (1,2) and e['matched']:
+            h=holds[e['hold']]
+            e['zone']='three' if e['three'] else 'rim' if h['endZone']=='rim' else 'mid'
     timeline=[{'kind':'hold','index':i,'t':h['t']} for i,h in enumerate(holds)]+[{'kind':'event','index':i,'t':e['t']} for i,e in enumerate(events)]
     timeline.sort(key=lambda x:(x['t'],0 if x['kind']=='event' else 1,x['index']))
     current={'CLE':0,'GSW':0}

@@ -2,20 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {MOMENTS,momentState} from '../src/scenarios.js';
 import {restore,addBranch,validState} from '../src/branch-tree.js';
-import {execute} from '../src/manager-options.js';
-import {options} from '../src/engine.js';
-
-test('all scenario flows play, branch, undo, roundtrip without mutating roots',()=>{
-  for(const m of MOMENTS) {
-    const state=momentState(m.id), previous=structuredClone(state), branches=addBranch([],state);
-    const next=execute(state,{action:options(state)[0].id});
-    assert.equal(next.turn,state.turn+1); assert.deepEqual(state,previous); assert.deepEqual(branches[0].state,state);
-    assert.deepEqual(restore(JSON.stringify({state:next,branches,previous})),{state:next,branches,previous});
-  }
+import {play} from '../src/engine.js';
+test('real key moments roundtrip and branch without overwriting replay',()=>{
+ for(const m of MOMENTS) {const state=momentState(m.id),previous=structuredClone(state),next=play(state,'shoot'),branches=addBranch([],state);assert.equal(next.mode,'simulation');assert.deepEqual(state,previous);assert.deepEqual(restore(JSON.stringify({state:next,previous,branches})),{state:next,previous,branches});}
 });
-test('invalid and empty autosave safely reject; branch retention bounded',()=>{
-  for(const text of [null,'','{','{}','{"state":{"version":1}}']) assert.equal(restore(text),null);
-  const s=momentState('start'); s.lineups.LAL[0]='bad'; assert.equal(validState(s),false);
-  let branches=[]; for(let i=0;i<40;i++) branches=addBranch(branches,momentState('start')); assert.equal(branches.length,30);
-  assert.throws(()=>momentState('bad'));
+test('old/corrupt saves reject; branch cap and no mutable snapshot sharing',()=>{
+ for(const text of [null,'','{','{}','{"state":{"version":1}}'])assert.equal(restore(text),null);
+ const s=momentState('start');s.positions[0][1]='bad';assert.equal(validState(s),false);
+ let b=[];for(let i=0;i<40;i++)b=addBranch(b,momentState('start'));assert.equal(b.length,30);assert.throws(()=>momentState('bad'));
 });

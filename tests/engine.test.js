@@ -1,49 +1,44 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {initialState,play,options,substitute,timeout,bench,TEAMS,matchup} from '../src/engine.js';
+import {DATA,initialState,replayState,play,options,policy,profile,currentHold,simulateHold,leverage} from '../src/engine.js';
+import {analyze,monteCarlo} from '../src/manager-options.js';
 
-test('real rosters contain players only and sourced season rates',()=>{
-  assert.equal(TEAMS.LAL.length,15); assert.equal(TEAMS.SAC.length,14);
-  for(const p of Object.values(TEAMS).flat()) { assert.ok(p.g>0); assert.ok(p.fg_pct>=0&&p.fg_pct<=1); assert.equal(p.source,'實際'); }
+test('independent box score agrees; every matched shot has one bounded same-player alignment',()=>{
+ const v=DATA.meta.validation;assert.equal(v.boxPlayerMatchRate,1);assert.equal(v.scoreMatch,true);assert.equal(v.pbpShots,173);assert.deepEqual(v.finalScore,{CLE:83,GSW:89});
+ for(const e of DATA.events.filter(e=>e.matched)) {const h=DATA.holds[e.hold];assert.equal(h.player,e.player);assert.equal(h.event,e.id);assert.ok(e.alignmentOffset<=5&&e.alignmentOffset>=-.4);}
+ assert.equal(DATA.holds.filter(h=>h.endKind==='pass').length,v.passes);
 });
-test('pass ends exactly one hold and changes handler; deterministic immutable state',()=>{
-  for(let seed=1;seed<100;seed++) { const s=initialState(seed), before=structuredClone(s), n=play(s,options(s)[0].id); assert.deepEqual(s,before); assert.equal(n.turn,1); assert.notEqual(n.handler,s.handler); assert.ok(n.elapsed>0); assert.deepEqual(n,play(s,options(s)[0].id)); }
+test('complete historical replay preserves score increments and clock order, and passes change controller',()=>{
+ let s=initialState(),steps=0;
+ while(s.phase==='playing') {
+  const h=currentHold(s),n=play(s,'replay');assert.equal(n.turn,s.turn+(h?1:0));assert.ok(n.elapsed>=s.elapsed);assert.ok(n.quarter>s.quarter||n.clock<=s.clock);
+  for(const t of ['CLE','GSW'])assert.ok(n.score[t]>=s.score[t]&&n.score[t]-s.score[t]<=3);
+  if(h?.endKind==='pass')assert.notEqual(n.handler,s.handler);
+  s=n;steps++;
+ }
+ assert.equal(steps,DATA.timeline.length);assert.equal(s.turn,DATA.holds.length);assert.deepEqual(s.score,{CLE:83,GSW:89});assert.equal(s.clock,0);assert.deepEqual(options(s),[]);assert.throws(()=>play(s,'replay'));
 });
-test('substitutions and timeouts preserve clocks and validate resources',()=>{
-  let s=initialState(); const incoming=bench(s,'LAL')[0].id, outgoing=s.handler;
-  s=substitute(s,'LAL',outgoing,incoming); assert.equal(s.handler,incoming); assert.equal(s.clock,720);
-  assert.throws(()=>substitute(s,'LAL',outgoing,incoming));
-  for(let i=0;i<6;i++) s=timeout(s,'LAL'); assert.throws(()=>timeout(s,'LAL')); assert.equal(s.turn,0);
-  assert.throws(()=>play(s,'bad'));
-});
-test('regulation ties enter overtime and overtime decides a winner',()=>{
-  let s=initialState(2); s.quarter=4; s.clock=1; s.score={LAL:80,SAC:80}; s=play(s,'hold'); assert.equal(s.quarter,5); assert.equal(s.clock,300); assert.equal(s.phase,'playing');
-  s.clock=1; s.score.LAL++; s=play(s,'hold'); assert.equal(s.phase,'final'); assert.throws(()=>play(s,'hold')); assert.deepEqual(options(s),[]);
-});
-test('shooting fouls charge the defender and sixth foul replaces them; shot clock cannot be held forever',()=>{
-  let found=false;
-  for(let seed=1;seed<100;seed++) {
-    const s=initialState(seed),d=matchup(s); s.fouls[d]=5; s.defense.SAC='hack';
-    const n=play(s,'drive');
-    if(n.fouls[d]===6) { found=true; assert.ok(!n.lineups.SAC.includes(d)); assert.equal(n.teamFouls.SAC,1); assert.ok(!bench(n,'SAC').some(p=>p.id===d)); break; }
+test('seeded 100-game sweep from tracked start: legal scores, clocks, holds and decisive finals',()=>{
+ for(let seed=1;seed<=100;seed++) {
+  let s=initialState(seed),guard=0;
+  while(s.phase==='playing'&&guard++<16000) {
+   const a=policy(s),before=structuredClone(s),n=play(s,a);assert.deepEqual(s,before);
+   assert.equal(n.turn,s.turn+1);assert.ok(n.elapsed>s.elapsed);assert.ok(n.quarter>s.quarter||n.clock<s.clock);assert.ok(n.shotClock>0&&n.shotClock<=24);assert.ok(n.lineups[n.possession].includes(n.handler));assert.equal(n.positionsActual,false);
+   if(a.startsWith('pass:'))assert.notEqual(n.handler,s.handler);
+   for(const t of ['CLE','GSW'])assert.ok(n.score[t]>=s.score[t]&&n.score[t]-s.score[t]<=4);
+   s=n;
   }
-  assert.ok(found);
-  let s=initialState(4); s.shotClock=1; s=play(s,'hold'); assert.equal(s.last.kind,'進攻時間違例'); assert.equal(s.possession,'SAC'); assert.equal(s.shotClock,24);
+  assert.equal(s.phase,'final');assert.notEqual(s.score.CLE,s.score.GSW);assert.equal(s.clock,0);
+ }
 });
-test('seeded many-game sweep: legal increments, monotonic clocks, floor/stamina invariants and finals',()=>{
-  const kinds=new Set();
-  for(let seed=1;seed<=100;seed++) {
-    let s=initialState(seed);
-    while(s.phase==='playing'&&s.turn<2500) {
-      const acts=options(s), action=acts[(s.turn+seed)%acts.length].id, n=play(s,action);
-      kinds.add(n.last.kind);
-      for(const team of ['LAL','SAC']) { const delta=n.score[team]-s.score[team]; assert.ok(delta>=0&&delta<=4); if(team!==s.possession) assert.equal(delta,0); assert.equal(new Set(n.lineups[team]).size,5); }
-      assert.ok(n.elapsed>s.elapsed); assert.ok(n.quarter>s.quarter||n.clock<s.clock); assert.ok(n.shotClock>0&&n.shotClock<=24); assert.ok(n.lineups[n.possession].includes(n.handler));
-      for(const x of Object.values(n.stamina)) assert.ok(x>=0&&x<=100);
-      if(action.startsWith('pass:')) assert.notEqual(n.handler,s.handler);
-      s=n;
-    }
-    assert.equal(s.phase,'final'); assert.notEqual(s.score.LAL,s.score.SAC); assert.equal(s.clock,0);
-  }
-  for(const word of ['進算加罰','投籃犯規','進攻籃板','防守籃板','失誤']) assert.ok([...kinds].some(k=>k.includes(word)),word);
+test('overtime, illegal actions, learned cells and empty samples',()=>{
+ let s=initialState(2);s.quarter=4;s.clock=.1;s.score={CLE:80,GSW:80};s=play(s,'reset');assert.equal(s.quarter,5);assert.equal(s.clock,300);
+ s.clock=.1;s.score.CLE++;s=play(s,'reset');assert.equal(s.phase,'final');assert.throws(()=>play(initialState(),'bad'));
+ const p=profile(initialState());assert.ok(p.fg>0&&p.fg<1);assert.ok(leverage(initialState())>0);assert.throws(()=>monteCarlo(initialState(),{},0));
+});
+test('cited analysis and paired Monte Carlo versus the real action are reproducible; risk remedies ranked',()=>{
+ const cursor=DATA.timeline.findIndex(x=>x.kind==='hold'&&DATA.holds[x.index].q===4&&DATA.holds[x.index].clock<30);const s=replayState(cursor);
+ const a=analyze(s,{action:'shoot'});assert.ok(a.pro.length&&a.con.length&&a.contingency.length);assert.ok(a.facts.every(f=>['實際','估計'].includes(f.source)));
+ const m=monteCarlo(s,{action:'shoot'},6,5);assert.deepEqual(m,monteCarlo(s,{action:'shoot'},6,5));assert.ok(m.selected.winProbability>=0&&m.selected.winProbability<=1);assert.equal(m.baseline.count,6);
+ assert.equal(Object.values(m.selected.outcomes).reduce((a,b)=>a+b),6);for(const risk of m.riskBranches)assert.ok(risk.remedies.every((r,i,rs)=>i===0||r.winProbability<=rs[i-1].winProbability));
 });
