@@ -55,6 +55,16 @@ class AnalysisTest(unittest.TestCase):
         with patch.dict(os.environ, {'ANTHROPIC_API_KEY': 'fixture-key'}), patch('server.urllib.request.urlopen', return_value=io.BytesIO(raw)):
             self.assertEqual(server.claude_analysis(PAYLOAD)['source'], '規則引擎')
 
+    def test_model_numbers_labels_and_percentages_remain_grounded(self):
+        facts = {'models': ['四要素', '球員影響', '布朗運動', 'BPM'], 'ppp': '1.37', 'wp': '7.42%', 'leverage': '.63', 'bpm': '-1.4'}
+        points = {**POINTS, 'pro': ['球員影響估計：期望1.37分，勝率7.42%，槓桿0.63。'], 'con': ['來源刊載 BPM -1.4；映射為估計。']}
+        server.validated_points(points)
+        server.validate_grounding(points, facts, POINTS)
+        with self.assertRaises(ValueError): server.validate_grounding({'pro': ['期望9.99分']}, facts, POINTS)
+        raw = json.dumps({'stop_reason': 'end_turn', 'content': [{'type': 'text', 'text': json.dumps(points)}]}).encode()
+        with patch.dict(os.environ, {'ANTHROPIC_API_KEY': 'fixture-key'}), patch('server.urllib.request.urlopen', return_value=io.BytesIO(raw)):
+            self.assertEqual(server.claude_analysis({'facts': facts, 'points': points})['source'], 'Claude')
+
 
 class HTTPTest(unittest.TestCase):
     @classmethod
@@ -69,7 +79,7 @@ class HTTPTest(unittest.TestCase):
         cls.http.shutdown(); cls.http.server_close(); cls.thread.join()
 
     def test_static_allowlist_and_status(self):
-        for path in ('/', '/src/engine.js', '/src/tracking-game.json', '/src/possession-game.json', '/src/branch-tree.js', '/icons/noto-tc-400.ttf', '/api/ai-status'):
+        for path in ('/', '/src/engine.js', '/src/tracking-game.json', '/src/possession-game.json', '/src/model-data.json', '/src/evaluation-models.js', '/src/model-comparison.js', '/src/comparison-table.js', '/src/branch-tree.js', '/icons/noto-tc-400.ttf', '/api/ai-status'):
             with urllib.request.urlopen(self.url + path) as response:
                 self.assertEqual(response.status, 200)
                 self.assertEqual(response.headers['X-Content-Type-Options'], 'nosniff')

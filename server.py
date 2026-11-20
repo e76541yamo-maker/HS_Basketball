@@ -115,7 +115,8 @@ def claude_analysis(payload):
                                         'each with one or two strings of at most 64 characters. '
                                         'Only use numbers already in supplied facts or points; invent no statistics. '
                                         'Preserve warnings, uncertainty, and meaning. Reuse the supplied vocabulary. '
-                                        'Do not use English words unless they are supplied player names. '
+                                        'Keep valuation and win-probability numbers tied to the supplied selected model. '
+                                        'Do not use English words unless supplied as player names or model/metric labels. '
                                         'Use only characters permitted by the schema. If needed keep the original text.'),
                              'messages': [{'role': 'user', 'content': json.dumps({'facts': facts, 'points': points}, ensure_ascii=False)}]}).encode(),
             headers={'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2026-10-21'}, method='POST')
@@ -175,6 +176,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def send_head(self):
         path = unquote(urlsplit(self.path).path)
         allowed = {'/', '/index.html', '/src/app.js', '/src/engine.js', '/src/scenarios.js', '/src/branch-tree.js',
+                   '/src/evaluation-models.js', '/src/model-comparison.js', '/src/comparison-table.js', '/src/model-data.json',
                    '/src/manager-options.js', '/src/simulation-worker.js', '/src/style.css', '/src/fonts.css', '/src/tracking-game.json', '/src/possession-game.json',
                    '/icons/noto-tc-400.ttf', '/icons/noto-tc-600.ttf', '/icons/OFL.txt', '/icons/DejaVu-LICENSE.txt'}
         if path not in allowed:

@@ -6,6 +6,8 @@ page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()
 const read=()=>page.evaluate(()=>JSON.parse(localStorage.getItem('courtside.possession.2015.v3')));
 try{
  await page.goto('http://localhost:3000');await page.locator('[data-moment="start"]').click();
+ assert.equal(await page.locator('#value-model').inputValue(),'current');assert.equal(await page.locator('#wp-model').inputValue(),'logistic');
+ assert.equal(await page.locator('.model-table thead th').count(),7);assert.equal(await page.locator('.model-table tbody td').count(),48);
  await page.locator('#branch').click();const before=(await read()).state;
  await page.locator('.tracking-view summary').click();assert.equal(await page.locator('.court-player').count(),10);
  await page.locator('#track-next').click();assert.equal((await read()).state.turn,before.turn);assert.equal((await read()).state.cursor,before.cursor);
@@ -35,20 +37,35 @@ try{
  await page.locator('[data-moment="key3"]').click();s=(await read()).state;assert.deepEqual(s.score,{CLE:77,GSW:83});assert.equal(s.clock,79);
  assert.equal(await page.locator('#team-state .lineup button').count(),10);assert.ok(await page.locator('.foul-trouble').count()>0);
  await page.locator('[data-action="spotup"]').click();assert.ok(await page.locator('#analysis .argument').nth(1).locator('.fact-chip').first().isVisible());
+ const originalDistribution=await page.locator('#distribution').innerText(),sameSituation=(await read()).state;
+ await page.locator('#value-model').selectOption('fourFactors');assert.notEqual(await page.locator('#distribution').innerText(),originalDistribution);assert.match(await page.locator('#analysis').innerText(),/場上陣容代理/);
+ await page.locator('#value-model').selectOption('impact');const oldWP=await page.locator('#matchup').innerText();await page.locator('#wp-model').selectOption('brownian');assert.notEqual(await page.locator('#matchup').innerText(),oldWP);
+ assert.deepEqual((await read()).state.score,sameSituation.score);assert.equal((await read()).state.turn,sameSituation.turn);assert.equal((await read()).state.mode,'replay');
+ await page.reload();assert.equal(await page.locator('#value-model').inputValue(),'impact');assert.equal(await page.locator('#wp-model').inputValue(),'brownian');
+ const beforeSub=await page.locator('[data-option="pnr"] td').last().innerText();await page.locator('#sub-out').selectOption('2544');await page.locator('#sub-in').selectOption('2592');await page.locator('#substitute').click();
+ assert.notEqual(await page.locator('[data-option="pnr"] td').last().innerText(),beforeSub);assert.equal((await read()).state.valueModel,'impact');assert.equal((await read()).state.wpModel,'brownian');await page.locator('#undo').click();
+ await page.locator('[data-action="spotup"]').click();
  await page.locator('#simulate').click();await page.locator('.simulation-result').waitFor({timeout:120000});assert.match(await page.locator('.simulation-result').innerText(),/實際選擇代理模型/);
  assert.ok(await page.locator('[data-remedy]').count()>0);
  for(const risk of await page.locator('.risk').all()){const labels=await risk.locator('[data-remedy]').allTextContents();assert.ok(new Set(labels.map(s=>s.match(/終場分差 ([−\d.-]+)/)?.[1])).size>1);}
  console.log('ENDGAME UI: '+(await page.locator('.simulation-result').innerText()).replaceAll('\n',' | '));
+ assert.match(await page.locator('.model-simulation').innerText(),/球員影響／布朗運動/);assert.ok((await page.locator('[data-remedy]').first().innerText()).includes('布朗運動'));
+ console.log('MODEL COMPARISON: '+JSON.stringify(await page.locator('.model-table').innerText()));
+ await page.setViewportSize({width:1920,height:1280});await page.locator('.model-assumptions summary').click();await page.evaluate(()=>document.fonts.ready);
+ assert.equal(await page.locator('.comparison-scroll').evaluate(e=>e.scrollWidth>e.clientWidth),false);await page.locator('#model-comparison').screenshot({path:'/home/ubuntu/shots/basketball-models.png'});
+ await page.setViewportSize({width:1440,height:1080});
  await page.evaluate(()=>document.fonts.ready);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
  await page.screenshot({path:'/home/ubuntu/shots/basketball-desktop.png',fullPage:true});
  await page.locator('[data-remedy]').first().click();assert.equal((await read()).state.mode,'simulation');
+ assert.equal((await read()).state.valueModel,'impact');assert.equal((await read()).state.wpModel,'brownian');
  let branchTurns=0;
  while(!await page.locator('#execute').isDisabled()&&branchTurns<200){await page.locator('#execute').click();branchTurns++;}
  assert.equal((await read()).state.phase,'final');console.log('ALTERNATIVE: risk-remedy possession branch played to final');
  await page.setViewportSize({width:390,height:844});await page.locator('[data-moment="key3"]').click();await page.locator('[data-action="transition"]').click();
+ await page.locator('#value-model').selectOption('fourFactors');assert.equal(await page.locator('#wp-model').inputValue(),'brownian');assert.equal(await page.locator('.comparison-scroll').evaluate(e=>e.scrollWidth>e.clientWidth),true);
  await page.locator('#resources [data-player]').last().click();assert.ok(await page.locator('#player-dialog').isVisible());await page.locator('#close-player').click();
  await page.evaluate(()=>document.fonts.ready);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);await page.screenshot({path:'/home/ubuntu/shots/basketball-mobile.png',fullPage:true});
  assert.deepEqual(errors,[]);
- console.log('BROWSER PASS: complete possession replay / every dead-ball type / final-five decisions / actual and simulated auto-advance / tracking steps do not advance turns / play types / clock and defense layers / timeout / substitutions / foul-trouble lineups / undo / branches / reload / player popovers / worker / ranked remedies / mobile; console errors: 0');
- console.log('SCREENSHOTS: /home/ubuntu/shots/basketball-desktop.png /home/ubuntu/shots/basketball-mobile.png /home/ubuntu/shots/basketball-full-game.png');
+ console.log('BROWSER PASS: complete possession replay / every dead-ball type / final-five decisions / actual and simulated auto-advance / tracking steps do not advance turns / three valuation models / independent WP selector / six-column comparison / BPM substitution impact / persisted models / timeout / substitutions / foul-trouble lineups / undo / branches / reload / player popovers / worker / selected-model remedies / mobile; console errors: 0');
+ console.log('SCREENSHOTS: /home/ubuntu/shots/basketball-desktop.png /home/ubuntu/shots/basketball-mobile.png /home/ubuntu/shots/basketball-full-game.png /home/ubuntu/shots/basketball-models.png');
 }finally{await browser.close();}

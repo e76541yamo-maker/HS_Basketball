@@ -1,5 +1,6 @@
 import tracking from './tracking-game.json' with {type:'json'};
 import possessions from './possession-game.json' with {type:'json'};
+import {adjustDistribution,valueModel,wpModel,brownianProbability} from './evaluation-models.js';
 
 export const DATA={...tracking,...possessions};
 export const copy=s=>structuredClone(s);
@@ -32,7 +33,7 @@ export function freeThrowsRemaining(s) {
  return es.slice(0,live<0?undefined:live).filter(e=>e.kind===3&&e.clock===s.clock&&!e.description.includes('Technical')).length;
 }
 function baseState(seed) {
- return {version:3,mode:'replay',cursor:0,possessionIndex:0,seed:seed>>>0,turn:0,phase:'playing',
+ return {version:3,mode:'replay',valueModel:'current',wpModel:'logistic',cursor:0,possessionIndex:0,seed:seed>>>0,turn:0,phase:'playing',
   possession:'CLE',shotClock:24,log:[],last:{kind:'節次開始'},decisionReasons:['節次開始'],plans:{CLE:{offense:'pnr',defense:'switch',clock:'normal'},GSW:{offense:'pnr',defense:'switch',clock:'normal'}}};
 }
 export function replayState(cursor=0,seed=20151225) {
@@ -80,7 +81,7 @@ export function distribution(s,action='pnr',decision={}) {
  const p=PLAY_TYPES[action]||PLAY_TYPES.pnr,points=[...p.points],a=lineupAdjustment(s);
  const defense=decision.defense||s.plans[other(s.possession)].defense;
  let to=p.turnover,seconds=p.seconds;
- const boost=(a.efficiency-1)*.30+(defense==='drop'&&action==='spotup'?.02:0)-(defense==='zone'&&action==='post'?.02:0);
+ const boost=(valueModel(s)==='current'?(a.efficiency-1)*.30:0)+(defense==='drop'&&action==='spotup'?.02:0)-(defense==='zone'&&action==='post'?.02:0);
  points[0]-=boost;points[2]+=boost;
  if(defense==='blitz'){to+=.045;points[0]-=.02;points[3]+=.02;}
  if(defense==='switch'&&action==='pnr'){points[0]+=.012;points[2]-=.012;}
@@ -88,7 +89,7 @@ export function distribution(s,action='pnr',decision={}) {
  if(call==='hold')seconds=Math.min(s.shotClock,s.clock)-1;
  if(call==='twoForOne')seconds=s.clock>=28&&s.clock<=40?6:Math.min(seconds,10);
  if(call==='quickThree') {points[0]+=.05;points[2]-=.20;points[3]+=.15;seconds=6;}
- return {points,turnover:clamp(to,.03,.3),foul:p.foul,seconds:clamp(seconds,1,24),source:'估計',adjustment:a.efficiency};
+ return adjustDistribution(s,PLAY_TYPES[action]?action:'pnr',{points,turnover:clamp(to,.03,.3),foul:p.foul,seconds:clamp(seconds,1,24),source:'估計',adjustment:a.efficiency,ftAdjustment:a.efficiency});
 }
 export function winProbability(s,team=s.possession) {
  const margin=s.score.CLE-s.score.GSW;
@@ -96,7 +97,7 @@ export function winProbability(s,team=s.possession) {
  // Logistic approximation to residual scoring variance, calibrated at +6 / 77s / ball.
  const advantage=margin+(s.possession==='CLE'?.65:-.65)+(bonus(s,'CLE')?.20:0)-(bonus(s,'GSW')?.20:0);
  const scale=Math.sqrt(Math.max(.08,remaining(s)*.075))*.98;
- const p=1/(1+Math.exp(-advantage/scale));return team==='CLE'?p:1-p;
+ const p=wpModel(s)==='brownian'?brownianProbability(advantage,remaining(s)):1/(1+Math.exp(-advantage/scale));return team==='CLE'?p:1-p;
 }
 export const leverage=s=>s.phase==='final'?0:(winProbability({...s,score:{...s.score,[s.possession]:s.score[s.possession]+3}},s.possession)-winProbability(s,s.possession))/.055;
 function appendLog(s,text) {s.log=[...s.log,text].slice(-12);}
@@ -111,7 +112,7 @@ function replayNext(state) {
   Object.assign(s,copy(end),{phase:'final',shotClock:0,turn:DATA.possessions.length,decisionReasons:['終場']});
   logActual(s,state.possessionIndex,DATA.possessions.length);s.last={kind:'實際・終場'};return s;
  }
- const s=replayState(i,state.seed);s.log=copy(state.log);s.plans=copy(state.plans);
+ const s=replayState(i,state.seed);s.log=copy(state.log);s.plans=copy(state.plans);s.valueModel=valueModel(state);s.wpModel=wpModel(state);
  logActual(s,state.possessionIndex,s.possessionIndex);
  s.last={kind:s.possessionIndex===state.possessionIndex?'同一回合・死球管理窗口':'實際回合自動前進'};
  return s;
@@ -157,7 +158,7 @@ export function simulatePossession(state,decision={}) {
    }
   }
   const n=ftCount||2;
-  for(let i=0;i<n;i++)if(rng()<d.adjustment*lineupAdjustment(s).ft)points++;
+  for(let i=0;i<n;i++)if(rng()<(d.ftAdjustment??d.adjustment)*lineupAdjustment(s).ft)points++;
   kind=points?'score':'empty';foul=true;
  } else {
   // Offensive rebounds repeat inside this turn; they never hand control to the opponent.
@@ -169,7 +170,7 @@ export function simulatePossession(state,decision={}) {
    foul=points===1||points===4||rng()<d.foul;
    if(foul){personalFoul(s,def,rng,Math.max(0,s.clock-used));if(points===0)points=Number(rng()<lineupAdjustment(s).ft)+Number(rng()<lineupAdjustment(s).ft);}
    if(points>0){kind='score';break;}
-   if(foul||used>=s.clock||rng()>=.24){kind='empty';break;}
+   if(foul||used>=s.clock||rng()>=(d.offensiveRebound??.24)){kind='empty';break;}
    orb++;
   }
  }

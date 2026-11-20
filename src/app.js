@@ -2,6 +2,8 @@ import {DATA,TEAMS,copy,player,options,play,manage,currentPossession,realChoice,
 import {analyze} from './manager-options.js';
 import {MOMENTS,momentState} from './scenarios.js';
 import {STORAGE_KEY,restore,addBranch} from './branch-tree.js';
+import {VALUE_MODELS,WP_MODELS,MODEL_DATA,valueModel,wpModel} from './evaluation-models.js';
+import {comparisonTable} from './comparison-table.js';
 
 const $=id=>document.getElementById(id),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const teamName={CLE:'克里夫蘭騎士',GSW:'金州勇士'},clock=s=>Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0'),pct=n=>(n*100).toFixed(1)+'%';
@@ -39,7 +41,8 @@ function argumentsView(){
  $('analysis').innerHTML='<p class="analysis-context">'+esc(a.summary)+'</p><div class="argument-grid">'+a.points.map(p=>'<details class="argument" open><summary><span class="sign '+(p.sign==='−'?'negative':'')+'">'+p.sign+'</span>'+esc(p.text)+'</summary><p>'+esc(p.detail)+'</p>'+chips(p.facts)+'</details>').join('')+'</div><p class="contingency"><b>對手回應</b>'+esc(a.attack[0])+'</p><p class="contingency"><b>風險補救</b>'+esc(a.contingency[0])+'</p><button id="rewrite" class="rewrite">Claude 潤飾論點（可選）</button><div id="ai-points"></div>';
  $('rewrite').onclick=async()=>{
   const rev=revision,button=$('rewrite');button.disabled=true;
-  try{const response=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({facts:{score:state.score,facts:a.facts},points:{pro:a.pro,con:a.con,attack:a.attack,contingency:a.contingency}})}),r=await response.json();
+  const comparison=a.comparisonFacts.map(row=>({...row,models:row.models.filter(m=>m.selected)}));
+  try{const response=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({facts:{score:state.score,facts:a.facts,comparison},points:{pro:a.pro,con:a.con,attack:a.attack,contingency:a.contingency}})}),r=await response.json();
    if(rev!==revision)return;$('source').textContent=r.source||'規則引擎';$('ai-points').innerHTML=r.source==='Claude'?Object.entries(r.points).map(([k,ps])=>'<p class="contingency"><b>'+({pro:'支持',con:'代價',attack:'對手',contingency:'補救'})[k]+'</b>'+ps.map(esc).join('；')+'</p>').join(''):'<p class="muted">未啟用或驗證未通過，保留規則論點。</p>';
   }catch{message('分析連線失敗，保留規則引擎。');}finally{button.disabled=false;}
  };
@@ -50,6 +53,8 @@ function controls(){
  const off=state.possession,def=off==='CLE'?'GSW':'CLE',clocks=Object.fromEntries(Object.entries(CLOCK_CALLS).filter(([id])=>id!=='quickThree'||state.score[off]<state.score[def])),schemes=Object.fromEntries(Object.entries(DEFENSES).filter(([id])=>id!=='intentional'||state.score[def]<state.score[off]));
  if(!clocks[clockCall])clockCall='normal';if(!schemes[defense])defense='switch';
  $('layers').innerHTML='<p class="observed"><span class="tag">'+(state.mode==='replay'?'實際逐球':'估計分支')+'</span> '+esc(realLabel(state))+'</p><div class="manager-controls"><label>進攻時鐘 <select id="clock-call">'+selectOptions(clocks,clockCall)+'</select></label><label>'+def+' 防守 <select id="defense-call">'+selectOptions(schemes,defense)+'</select></label><label>管理球隊 <select id="manage-team">'+selectOptions({CLE:'CLE',GSW:'GSW'},off)+'</select></label><button id="timeout">叫暫停・建立分支</button></div><div id="subs"></div>';
+ $('model-selectors').innerHTML='<div class="manager-controls"><label>選項估值模型 <select id="value-model">'+selectOptions(Object.fromEntries(Object.entries(VALUE_MODELS).map(([id,m])=>[id,m.label])),valueModel(state))+'</select></label><label>勝率模型（獨立）<select id="wp-model">'+selectOptions(Object.fromEntries(Object.entries(WP_MODELS).map(([id,m])=>[id,m.label])),wpModel(state))+'</select></label></div><p class="muted">'+esc(VALUE_MODELS[valueModel(state)].note)+' '+esc(WP_MODELS[wpModel(state)].note)+'</p>';
+ for(const id of ['value-model','wp-model'])$(id).onchange=()=>{state={...state,valueModel:$('value-model').value,wpModel:$('wp-model').value};revision++;simulation=null;persist();render();message('已切換估計模型；比分與回合不變，分支與自動儲存保留選擇。');};
  const subForm=()=>{const t=$('manage-team').value,bench=TEAMS[t].filter(p=>!state.lineups[t].includes(p.id)&&state.personalFouls[p.id]<6);
   $('subs').innerHTML='<div class="sub-controls"><label>換下 <select id="sub-out">'+selectOptions(Object.fromEntries(state.lineups[t].map(id=>[id,player(id).name])))+'</select></label><label>換上 <select id="sub-in">'+selectOptions(Object.fromEntries(bench.map(p=>[p.id,p.name])))+'</select></label><button id="substitute" '+(!bench.length?'disabled':'')+'>死球換人・建立分支</button></div>';
   $('substitute').onclick=()=>{try{transition(manage(state,{type:'substitution',team:t,out:$('sub-out').value,in:$('sub-in').value}),'換人已建立獨立分支，不再套用未來史實。');}catch(e){message(e.message);}};
@@ -58,6 +63,7 @@ function controls(){
  for(const id of ['clock-call','defense-call'])$(id).onchange=()=>{clockCall=$('clock-call').value;defense=$('defense-call').value;if(action==='replay')action=realChoice(state);revision++;simulation=null;render();};
  const d=distribution(state,action==='replay'?realChoice(state):action,decision());
  $('distribution').innerHTML='<h3>完整回合得分分布 <i>估計</i></h3><p class="muted">聯盟典型先驗，非該年度球隊官方打法表。失誤獨立先抽；以下是非失誤回合的先驗，犯規與陣容另調整。</p><div class="outcome-grid">'+d.points.map((p,n)=>'<span>'+n+' 分<b>'+pct(p)+'</b></span>').join('')+'</div>'+chips([{source:'估計',label:'失誤率',value:pct(d.turnover)},{source:'估計',label:'犯規率先驗',value:pct(d.foul)},{source:'估計',label:'使用秒數',value:d.seconds.toFixed(1)}]);
+ $('model-comparison').innerHTML=comparisonTable(state,decision());
  $('execute').disabled=!opts.length;$('simulate').disabled=!opts.length;$('undo').disabled=!previous;
  if(state.phase==='final')for(const id of ['timeout','substitute','clock-call','defense-call'])$(id).disabled=true;
 }
@@ -72,12 +78,13 @@ function render(){
 document.addEventListener('click',e=>{
  const b=e.target.closest('button');if(!b)return;
  if(b.dataset.action){action=b.dataset.action;simulation=null;revision++;render();}
- if(b.dataset.moment)transition(momentState(b.dataset.moment),'已載入實際回合窗口。');
+ if(b.dataset.moment)transition({...momentState(b.dataset.moment),valueModel:valueModel(state),wpModel:wpModel(state)},'已載入實際回合窗口。');
  if(b.dataset.branch!==undefined)transition(copy(branches[Number(b.dataset.branch)].state),'已返回分支。');
  if(b.dataset.player){
   const id=b.dataset.player,p=player(id),d=DATA.distributions[id],season=DATA.seasonStats[id]||{};
   $('player-detail').innerHTML='<p class="eyebrow">'+p.team+' · '+esc(p.position)+' · '+esc(p.jersey)+'</p><h2>'+esc(p.name)+'</h2>'+chips([{source:'實際',label:'本場命中／出手',value:d.fg+' / '+d.fga},{source:'實際',label:'本場得分／失誤',value:d.points+' / '+d.turnovers},{source:state.mode==='replay'?'實際':'估計',label:'個人犯規',value:state.personalFouls[id]},{source:'實際',label:'年度平均得分',value:season.pts_per_g??'無資料'},{source:'實際',label:'年度投籃命中率',value:season.fg_pct??'無資料'},{source:'估計',label:'年度使用率（來源模型）',value:season.usg_pct??'無資料'},{source:'估計',label:'年度真實命中率（來源模型）',value:season.ts_pct??'無資料'}])+'<h3>實際・追蹤傳球目標分布</h3>'+Object.entries(d.targets).map(([id,n])=>'<p>'+esc(player(id).name)+' '+n+' 次</p>').join('')+'<p class="muted">傳球僅供實際回合重播。模擬以本場及年度效率加權收縮；沒有年度資料時採聯盟先驗，皆標估計。</p>';$('player-dialog').showModal();
  }
+ if(b.dataset.player){const impact=MODEL_DATA.players[b.dataset.player];$('player-detail').insertAdjacentHTML('beforeend','<h3>年度來源刊載影響值</h3>'+chips([{source:impact?.bpmSource||'估計',label:'BPM',value:impact?.bpm??0}])+'<p class="muted">來源數值是統計模型，不是本場實際正負分；其陣容與打法映射屬估計，並非因果效果。</p>');}
  if(b.dataset.remedy&&simulation){const [i,j]=b.dataset.remedy.split(':').map(Number),r=simulation.riskBranches[i].remedies[j];transition(copy(r.state),'已建立風險後補救分支：'+r.label);}
 });
 $('close-player').onclick=()=>$('player-dialog').close();
@@ -90,7 +97,10 @@ $('simulate').onclick=()=>{
  worker.onmessage=({data})=>{
   if(data.id!==id||rev!==revision)return;$('simulate').disabled=false;if(data.error){message(data.error);return;}
   simulation=data.result;const m=simulation;
+  const modelSummary='<p class="model-simulation">'+esc(VALUE_MODELS[m.valueModel].label)+'／'+esc(WP_MODELS[m.wpModel].label)+'・首回合後模型均值 '+pct(m.selected.modelWinProbability)+'／基準 '+pct(m.baseline.modelWinProbability)+'；差異 '+(m.modelDelta*100).toFixed(2)+' 個百分點。下方完整推演勝率是終場勝負抽樣比例，不等於所選勝率公式。</p>';
   $('simulation').innerHTML='<div class="simulation-result"><h3>估計・配對蒙地卡羅 '+m.count+' 次</h3><p>本次勝率 <b>'+pct(m.selected.winProbability)+'</b> ／實際選擇代理模型 <b>'+pct(m.baseline.winProbability)+'</b></p><p>差異 '+(m.delta*100).toFixed(1)+' 個百分點 · 本回合期望得分 '+m.selected.expectedPoints.toFixed(2)+'</p><small>視角 '+state.possession+'；實際逐球未標註戰術，基準打法由出手文字推定，屬估計。非已知結果比較。風險使用代表種子，不是條件平均。</small><h3>依期望終場分差排序 <i>估計</i></h3>'+m.riskBranches.map((risk,i)=>'<details class="risk" open><summary>風險：'+(risk.kind==='turnover'?'失誤／違例':'未得分')+' · '+risk.count+'/'+m.count+'</summary>'+risk.remedies.map((r,j)=>'<button data-remedy="'+i+':'+j+'">'+(j+1)+'. '+esc(r.label)+' · 終場分差 '+r.expectedMargin.toFixed(2)+' 分 · 勝率 '+pct(r.winProbability)+'（'+r.count+' 次）↗</button>').join('')+'</details>').join('')+'</div>';
+  $('simulation').insertAdjacentHTML('afterbegin',modelSummary);
+  document.querySelectorAll('[data-remedy]').forEach(button=>{const [i,j]=button.dataset.remedy.split(':').map(Number),r=m.riskBranches[i].remedies[j];button.append(' · '+WP_MODELS[m.wpModel].label+' '+pct(r.modelWinProbability));});
   message('比較完成。排名差異可能小於抽樣誤差；補救可另開分支。');
  };worker.postMessage({id,state,decision:decision(),seed:20151225});
 };

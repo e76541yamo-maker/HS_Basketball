@@ -1,8 +1,10 @@
 import {copy,DATA,player,CLOCK_CALLS,PLAY_TYPES,DEFENSES} from './engine.js';
+import {VALUE_MODELS,WP_MODELS} from './evaluation-models.js';
 export const STORAGE_KEY='courtside.possession.2015.v3';
 const integer=(n,min,max=Number.MAX_SAFE_INTEGER)=>Number.isInteger(n)&&n>=min&&n<=max;
 export function validState(s) {
  return Boolean(s?.version===3&&['replay','simulation'].includes(s.mode)&&['playing','final'].includes(s.phase)
+  &&(s.valueModel===undefined||Object.hasOwn(VALUE_MODELS,s.valueModel))&&(s.wpModel===undefined||Object.hasOwn(WP_MODELS,s.wpModel))
   &&integer(s.cursor,0,DATA.windows.length-1)&&integer(s.possessionIndex,0,DATA.possessions.length-1)&&integer(s.seed,0,4294967295)
   &&integer(s.turn,0)&&integer(s.quarter,1)&&Number.isFinite(s.clock)&&s.clock>=0&&s.clock<=(s.quarter<=4?720:300)
   &&Number.isFinite(s.shotClock)&&s.shotClock>=0&&s.shotClock<=24&&['CLE','GSW'].includes(s.possession)
