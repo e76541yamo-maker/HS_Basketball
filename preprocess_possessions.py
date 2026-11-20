@@ -154,7 +154,7 @@ def build(rows, tracking, box_totals=None):
         grouped = {}
         for w in p['windows']:
             # An end-of-possession dead ball opens the *next* possession's window.
-            if w['offset'] >= len(p['events']):
+            if w['offset'] >= len(p['events']) or (p['outcome'] == 'turnover' and w['state']['clock'] == p['end']['clock']):
                 if p['id']+1 < len(possessions):
                     possessions[p['id']+1]['startReasons'].append(w['reason'])
                 continue

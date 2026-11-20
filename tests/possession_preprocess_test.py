@@ -48,6 +48,15 @@ class PossessionTest(unittest.TestCase):
         p = Season(); p.feed('<table id="per_game_stats"><tr><td data-stat="name_display">Stephen Curry</td><td data-stat="pts_per_g">30.1</td></tr></table>')
         self.assertEqual(p.rows[0][1]['pts_per_g'], '30.1')
 
+    def test_offensive_foul_window_follows_turnover(self):
+        rows = [self.row(12, '12:00'), self.row(6, '2:36', 'GSW', '6', 'OFF.Foul', action='4'),
+                self.row(5, '2:36', 'GSW', '6', 'Offensive Foul Turnover'),
+                self.row(1, '2:20', 'CLE', score='2 - 0'), self.row(13, '0:00')]
+        x = build(rows, self.tracking)
+        windows = [w for w in x['windows'] if w['state']['clock'] == 156]
+        self.assertTrue(windows)
+        self.assertTrue(all(x['possessions'][w['possessionIndex']]['team'] == 'CLE' for w in windows))
+
     def test_committed_windows_cover_every_dead_ball_and_late_possession(self):
         x = json.loads((Path(__file__).resolve().parents[1]/'src/possession-game.json').read_text())
         for p in x['possessions']:
