@@ -1,3 +1,52 @@
+body>.decision-bar{
+ position:fixed;z-index:5;inset:auto 0 0;margin:0;padding:8px max(12px,calc((100vw - 960px)/2)) max(8px,env(safe-area-inset-bottom));display:grid;
+ grid-template-columns:minmax(0,1fr) auto auto;gap:5px 10px;background:var(--surface);border-top:1px solid var(--border);box-shadow:0 -5px 20px #15252416
+}
+.decision-bar #notice{grid-column:1/-1;margin:0;font-size:11px}
+.decision-bar #notice:empty{display:none}
+.decision-bar button{min-height:44px;padding:8px 14px;margin:0}
+#current-choice{align-self:center;font-size:11px;font-weight:600}
+#status-strip{position:fixed;z-index:6;inset:0 0 auto;min-height:53px;padding:5px 12px;display:grid;grid-template-columns:repeat(6,auto);justify-content:center;gap:5px 24px;background:#172a28;color:#fff9e8;font-size:12px;font-variant-numeric:tabular-nums}
+#status-strip span{display:flex;flex-direction:column;justify-content:center;line-height:1.35}
+#status-strip small{color:#d4dfcb;font-size:10px}
+#status-strip b{white-space:nowrap}
+html body{padding:53px 0 106px}
+#verify-plan,#feedback,#review{padding:14px;border:1px solid var(--border);border-radius:6px;background:var(--surface);margin:12px 0}
+#verify-plan h3,#feedback h2,#review h2{margin:0 0 8px}
+#plan-comparison table{table-layout:fixed;width:100%;border-collapse:collapse;margin:5px 0}
+#plan-comparison th,#plan-comparison td{padding:6px;text-align:left;border-bottom:1px solid var(--border);overflow-wrap:anywhere}
+#plan-comparison th{width:63%;font-size:12px}
+#plan-comparison small{display:block;font-weight:400}
+#analysis-details,.start-panel{margin-top:12px}
+#analysis-details>summary,.start-panel>summary{font-weight:600;padding:9px 0}
+#coach-lineup-details{margin-top:6px}
+#review{max-width:720px;margin:28px auto;padding:22px}
+#review p,#feedback p,#tutorial-content p{margin:8px 0}
+#tutorial-content{clear:both}
+#tutorial-content ol{padding-left:25px}
+#tutorial-content li{margin:7px 0}
+#tutorial-content dd{margin:0 0 6px}
+#tutorial-content .manager-controls button{width:auto}
+#tutorial-content button[aria-pressed=true]{border-color:var(--accent);background:#f7f0e6}
+#close-tutorial{float:right}
+[hidden]{display:none!important}
+@media(max-width:620px){
+ html body{padding-top:81px}
+ #status-strip{min-height:81px;grid-template-columns:repeat(3,1fr);gap:3px 9px}
+ .topbar .brand{display:none}
+ .topbar .header-actions{width:100%;max-width:none;flex-wrap:wrap;justify-content:space-between}
+ .topbar #play-modes{width:auto;justify-content:flex-start;gap:5px}
+ body .topbar{height:auto;min-height:56px;padding-block:6px}
+ body>.intro{display:none}
+ .center .phase-banner{display:none}
+ .center .decision-panel{margin-top:8px;padding-top:10px}
+ .center .decision-panel .observed{padding:6px 9px}
+ .center #verify-plan{margin-top:8px}
+ .workspace>.sidebar{order:1}
+ .workspace>.right{order:2}
+ #review{margin:16px}
+ #current-choice{font-size:10px}
+}
  .simulation-result>.segment-histogram{display:grid;gap:5px}#play-modes select{color:var(--text)}.coach-lineup .foul-trouble{background:#fff1de;color:#8b4300;border-left:3px solid #c47b25}@media(max-width:600px){#scenarios>h3{min-width:100px;align-self:center}}
  #play-modes{display:flex;gap:10px;flex-wrap:wrap}#play-modes label{font-size:.8rem}.phase-banner{padding:12px;border-left:4px solid var(--accent,#c98d56);background:#f6eee2}.coach-lineup{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;border:1px solid #d8cfbe;margin:16px 0;padding:12px}.coach-lineup label{padding:6px;background:#f5f1e8;font-size:.85rem}.coach-lineup small{display:block;font-size:.72rem}.segment-histogram{display:grid;gap:5px;margin:16px 0}.segment-histogram>div{display:grid;grid-template-columns:70px minmax(0,1fr) 55px;gap:10px;align-items:center}.segment-histogram meter{width:100%}.simulation-result [data-segment-remedy]{display:block;margin:8px 0;width:100%;text-align:left}@media(max-width:600px){.coach-lineup{grid-template-columns:1fr}.topbar{height:auto;min-height:125px;align-items:flex-start;padding-top:12px;padding-bottom:12px}.brand{max-width:115px}.header-actions{flex-wrap:wrap;justify-content:flex-end;max-width:210px}#play-modes{width:100%;justify-content:flex-end}#play-modes label{font-size:10px}#play-modes select{font-size:10px;padding:5px}}
 :root{color-scheme:light}.center #matchup{display:block}.center #layers{display:block}#distribution .outcome-grid{grid-template-columns:repeat(5,minmax(0,1fr))}@media(max-width:600px){#distribution .outcome-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}

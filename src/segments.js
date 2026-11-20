@@ -59,24 +59,27 @@ export function coachDecision(s,c,rng=rngFrom(s.seed)) {
  }
  return d;
 }
-function advanceSimulation(s,c,decision) {
+function advanceSimulation(s,c,decision,onPossession) {
  const before=s,next=simulatePossession(s,decision||coachDecision(s,c));
  const used=before.quarter===next.quarter?before.clock-next.clock:before.clock;
  next.fatigue={...before.fatigue};
- for(const p of Object.values(DATA.players))next.fatigue[p.id]=Math.max(0,(next.fatigue[p.id]||0)+(before.lineups[p.team].includes(p.id)?used:-used*.7));
+ applyFatigue(next.fatigue,before.lineups,used);
+ onPossession?.(next.last);
  return next;
+}
+function applyFatigue(fatigue,lineups,duration) {
+ for(const p of Object.values(DATA.players))fatigue[p.id]=Math.max(0,(fatigue[p.id]||0)+(lineups[p.team].includes(p.id)?duration:-duration*.7));
 }
 function carry(s,next){return {...next,playMode:'segment',coach:copy(s.coach),valueModel:valueModel(s),wpModel:wpModel(s),fatigue:copy(s.fatigue||{})};}
 function historicalAt(s,cursor) {
- if(cursor<0){
-  const end=DATA.possessions.at(-1).end;
-  return carry(s,{...copy(s),...copy(end),phase:'final',clock:0,shotClock:0,turn:DATA.possessions.length,decisionReasons:['終場']});
- }
- const next=carry(s,replayState(cursor,s.seed));
- for(const p of DATA.possessions){
-  const duration=Math.max(0,Math.min(elapsed(next),elapsed(p.end))-Math.max(elapsed(s),elapsed(p.start)));
-  if(!duration)continue;
-  for(const team of ['CLE','GSW'])for(const id of p.start.lineups[team])next.fatigue[id]=(next.fatigue[id]||0)+duration;
+ const end=DATA.possessions.at(-1).end;
+ const next=carry(s,cursor<0?{...copy(s),...copy(end),phase:'final',clock:0,shotClock:0,turn:DATA.possessions.length,decisionReasons:['終場']}:
+  replayState(cursor,s.seed));
+ for(let i=0;i<DATA.windows.length;i++){
+  const from=DATA.windows[i].state,to=DATA.windows[i+1]?.state||end;
+  if(elapsed(from)>=elapsed(next))break;
+  const duration=Math.min(elapsed(next),elapsed(to))-Math.max(elapsed(s),elapsed(from));
+  if(duration>0)applyFatigue(next.fatigue,from.lineups,duration);
  }
  return next;
 }
@@ -94,7 +97,7 @@ export function historicalSegment(s) {
  next.coach.lineup=[...next.lineups[next.coach.team]];next.coach.target='';next.coach.timeout=false;
  return next;
 }
-export function runSegment(state,settings=state.coach,decision) {
+export function runSegment(state,settings=state.coach,decision,onPossession) {
  if(state.phase!=='playing')throw new Error('比賽已結束');
  if(clutch(state))settings={...settings,lineup:[...state.lineups[settings.team]]};
  validateCoach(state,settings);
@@ -110,13 +113,13 @@ export function runSegment(state,settings=state.coach,decision) {
  do{
   let choice=late&&s.turn===state.turn?decision:undefined;
   if(choice?.action==='freeThrows'&&!freeThrowsRemaining(s))choice={...policy(s),defense:choice.defense};
-  s=advanceSimulation(s,s.coach,choice);count++;
+  s=advanceSimulation(s,s.coach,choice,onPossession);count++;
   if(count>1000)throw new Error('區段未能結束');
   if(s.quarter!==q)break;
   if(late){if(s.turn>state.turn&&(s.phase==='final'||managedStop(s)))break;}
   else if(elapsed(s)>=end||clutch(s))break;
  }while(s.phase==='playing');
- while(s.phase!=='final'&&s.quarter===q&&clutch(s)&&!managedStop(s))s=advanceSimulation(s,s.coach);
+ while(s.phase!=='final'&&s.quarter===q&&clutch(s)&&!managedStop(s))s=advanceSimulation(s,s.coach,undefined,onPossession);
  s.coach.lineup=[...s.lineups[s.coach.team]];
  if(!s.lineups[other(s.coach.team)].includes(s.coach.target))s.coach.target='';
  s.segmentPossessions=s.turn-state.turn;
@@ -135,26 +138,31 @@ export function segmentMonteCarlo(s,c=s.coach,count=128,seed=20151225) {
  const mean=a=>a.reduce((x,y)=>x+y,0)/a.length,sorted=[...margins].sort((a,b)=>a-b),wpSorted=[...wps].sort((a,b)=>a-b);
  const actual=historicalSegment(s),historical={score:actual.score,margin:actual.score[team]-actual.score[other(team)]-margin,wp:winProbability(actual,team),reference:s.mode==='replay'?'實際同起點':'歷史終點參照・分支起點不同'};
  const bins=new Map();for(const n of margins){const b=Math.floor(n/4)*4;bins.set(b,(bins.get(b)||0)+1);}
- return {source:'估計',count,valueModel:valueModel(s),wpModel:wpModel(s),meanMargin:mean(margins),expectedPoints:mean(points),meanWP:mean(wps),possessions:possessions/count,
+ return {source:'估計',count,valueModel:valueModel(s),wpModel:wpModel(s),meanMargin:mean(margins),expectedPoints:mean(points),meanWP:mean(wps),possessions:possessions/count,wpSamples:wps,
   percentiles:[.1,.5,.9].map(p=>percentile(sorted,p)),wpPercentiles:[.1,.5,.9].map(p=>percentile(wpSorted,p)),histogram:[...bins].sort((a,b)=>a[0]-b[0]).map(([from,n])=>({from,to:from+3,count:n})),historical,
   riskRate:margins.filter(n=>n<0).length/count,leverage:mean(wps.map(n=>Math.abs(n-winProbability(s,team))))/.055};
 }
 export function segmentComparison(s,c=s.coach,count=12) {
- if(s.phase==='final')return {rows:[],columns:[],disagreement:false};
+ if(s.phase==='final')return {rows:[],columns:[],disagreement:false,count};
  const rows=Object.entries(TEMPOS).map(([id,label])=>({id,label:label+'節奏',values:[]})),columns=[];
  for(const value of Object.keys(VALUE_MODELS))for(const wp of Object.keys(WP_MODELS)){
   const values=rows.map(r=>segmentMonteCarlo({...s,valueModel:value,wpModel:wp},{...c,tempo:r.id},count));
   const best=Math.max(...values.map(v=>v.meanWP));columns.push({valueModel:value,wpModel:wp,label:VALUE_MODELS[value].label+'・'+WP_MODELS[wp].label,best:rows.filter((_,i)=>Math.abs(values[i].meanWP-best)<1e-12).map(r=>r.id)});
-  rows.forEach((row,i)=>row.values.push({expectedPoints:values[i].expectedPoints,winProbabilityAfter:values[i].meanWP,leverage:values[i].leverage,rank:1+values.filter(v=>v.meanWP>values[i].meanWP+1e-12).length}));
+  rows.forEach((row,i)=>row.values.push({expectedPoints:values[i].expectedPoints,winProbabilityAfter:values[i].meanWP,wpPercentiles:values[i].wpPercentiles,wpSamples:values[i].wpSamples,leverage:values[i].leverage,rank:1+values.filter(v=>v.meanWP>values[i].meanWP+1e-12).length}));
  }
- return {rows,columns,disagreement:new Set(columns.map(c=>c.best.join(','))).size>1};
+ return {rows,columns,count,disagreement:new Set(columns.map(c=>c.best.join(','))).size>1};
 }
 export function segmentRemedies(s,c=s.coach,count=64){
  return ['switch','drop','blitz','zone'].map(id=>({id,label:DEFENSES[id],...segmentMonteCarlo(s,{...c,defense:id},count)})).sort((a,b)=>b.meanMargin-a.meanMargin);
 }
 export function segmentAnalysis(s,result) {
- const r=result||segmentMonteCarlo(s,s.coach,24),fact=(source,label,value)=>({source,label,value});
- const facts=[fact('實際','歷史區段終點比分',r.historical.score.CLE+'：'+r.historical.score.GSW),fact('估計','區段期望得分',r.expectedPoints.toFixed(2)),fact('估計','區段淨分',r.meanMargin.toFixed(2)),fact('估計','區段後勝率',(100*r.meanWP).toFixed(2)+'%'),fact('估計','淨分十分位／中位／九十分位',r.percentiles.join('／')),fact('估計','落後風險',(100*r.riskRate).toFixed(1)+'%'),fact('估計','教練節奏',TEMPOS[s.coach.tempo]),fact('估計','目標效率修正',targetBoost(s,s.coach).toFixed(3))];
- const pro=['教練只配置區段策略，球員自動完成回合。','以所選估值與勝率模型比較區段淨分分布。'],con=['歷史比分是實際；戰術、疲勞與對位映射皆為估計。','BPM 不是防守能力實測；目標對位只是透明代理。'],attack=['對手依預設策略自動進攻與防守。'],contingency=['區段淨分落後時，比較四種防守補救；抽樣排序不是因果效果。'];
- return {summary:'區段教練決策・估計',facts,comparisonFacts:[],pro,con,attack,contingency,points:[{sign:'＋',text:'支持這個選擇',detail:pro.join(''),facts},{sign:'−',text:'代價與限制',detail:con.join(''),facts:facts.filter(f=>f.source==='估計')}]};
+ const r=result||segmentMonteCarlo(s,s.coach,12),fact=(source,label,value)=>({source,label,value});
+ const mean=n=>n.toFixed(r.count<=12?0:2),pct=n=>(100*n).toFixed(r.count<=12?0:1)+'%';
+ const margin=mean(r.meanMargin),risk=pct(r.riskRate),points=mean(r.expectedPoints),sample=r.count+' 次配對推演';
+ const facts=[fact('實際','歷史區段終點比分',r.historical.score.CLE+'：'+r.historical.score.GSW),fact('估計','樣本數',r.count),fact('估計','區段期望得分',points),fact('估計','區段淨分',margin),fact('估計','區段後勝率',pct(r.meanWP)),fact('估計','淨分十分位／中位／九十分位',r.percentiles.join('／')),fact('估計','落後風險',risk),fact('估計','教練節奏',TEMPOS[s.coach.tempo]),fact('估計','目標效率修正',targetBoost(s,s.coach).toFixed(3))];
+ const pro=['估計｜區段平均淨分 '+margin+' 分（'+sample+'）：'+(Number(margin)>0?'現有設定可望拉開分差':Number(margin)<0?'現有設定不利於追分':'現有設定未見分差優勢')+'；若更多配對推演使淨分方向反轉，就要改判斷。'];
+ const con=['估計｜本段淨分為負 '+risk+'（'+sample+'）：'+(r.riskRate?'仍有單段失分多於得分的風險':'本批未抽到淨分為負，不代表沒有風險')+'；若增加樣本後比例改變，就要更新判斷。'];
+ const attack=['估計｜本隊區段平均得分 '+points+' 分（'+sample+'）：對手預設防守仍有失分；若改防守讓得分更高，改防就不划算。'];
+ const contingency=['實際｜歷史終點 '+r.historical.score.CLE+'：'+r.historical.score.GSW+'：可用來回看原路線；若已走估計分支，就不能歸因給這張策略。'];
+ return {summary:'區段教練替代策略・估計・'+sample,facts,comparisonFacts:[],pro,con,attack,contingency,points:[{sign:'＋',text:'支持這個選擇',detail:pro[0],facts},{sign:'−',text:'代價與限制',detail:con[0],facts:facts.filter(f=>f.source==='估計')}]};
 }

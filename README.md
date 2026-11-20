@@ -9,6 +9,7 @@ source ~/.nvm/nvm.sh
 python3 server.py                    # http://localhost:3000; PORT overrides 3000
 npm run check && npm test
 node verify/browser.mjs             # Playwright from sibling HS-BaseSta/node_modules
+node verify/shared-ui-browser.mjs   # desktop and 390px decision, feedback, review and tutorial screenshots
 python3 verify/live-claude.py        # separately start server with environment-bound ANTHROPIC_API_KEY
 ```
 
@@ -87,6 +88,8 @@ Comparison expected points include turnover probability. WP after averages the c
 Selected valuation changes drive all simulated possessions, including baseline and risk-remedy rollouts; selected WP drives the scoreboard, leverage, argument facts and the displayed **first-possession-after WP mean** sampled by Monte Carlo. The original **full-game win fraction** and expected final margin are retained, explicitly distinguished from that WP mean: changing only the closed-form WP selector cannot change actual final-game win counts under identical seeds. Remedies continue to rank by expected final margin, then full-game win fraction, and also show the selected WP estimate. They preserve both model IDs when opened as branches. Both argument sides retain evidence rows; Four Factors adds team/lineup factors and impact adds sourced player BPM. Claude receives selected-model facts **and rounded numbers from the selected comparison column only**, allowing valid rewritten model numbers while still rejecting invented ones, without silently borrowing another model's numbers. Tests cover the numeric/vocabulary validator and live verification uses the new model facts.
 
 ## Coach segment mode (default)
+
+The fixed status strip always shows win probability for the selected team. 「驗證本單」 keeps only the current choice, recommendation and baseline visible; the other models and evidence are opt-in. Coach previews use 12 paired samples per simulated plan and show the 10th–90th percentile of segment-end model estimates. Possession previews use the analytic prior; explicit rollouts use full-game win counts with Wilson intervals. Both modes have a two-minute beginner case, decision feedback and a separate final review.
 
 The persisted **區段教練** / **逐回合** switch keeps the existing possession engine and all its options intact. Choose CLE or GSW in coach mode. The first phase is **eight coach segments**, computed deterministically at load from the committed PBP windows: preserve quarter starts, then select the historical timeout furthest from existing boundaries, requiring at least 120 seconds from its neighbours. Unselected timeouts merge into the surrounding segment; no new official timeout is invented. A segment ends at a complete-possession/PBP boundary, not at an arbitrary interrupted live play. Simulation finishes the possession crossing the chosen boundary, so its endpoint can differ by seconds from the exact historical endpoint.
 
