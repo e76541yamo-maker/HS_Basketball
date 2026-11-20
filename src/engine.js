@@ -163,7 +163,9 @@ export function simulatePossession(state,decision={}) {
  } else {
   // Offensive rebounds repeat inside this turn; they never hand control to the opponent.
   for(;;) {
-   used+=Math.min(orb?14:s.shotClock,Math.max(1,d.seconds+(rng()-.5)*8));
+   const attemptSeconds=Math.min(orb?14:s.shotClock,Math.max(1,d.seconds+(rng()-.5)*8));
+   if(used+attemptSeconds>s.clock){used=s.clock;kind='empty';foul=false;break;}
+   used+=attemptSeconds;
    if(rng()<d.turnover){kind='turnover';break;}
    let x=rng();points=4;
    for(let n=0;n<d.points.length;n++){x-=d.points[n];if(x<=0){points=n;break;}}
