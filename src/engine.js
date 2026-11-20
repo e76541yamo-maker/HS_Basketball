@@ -5,8 +5,8 @@ export const player = id => Object.values(TEAMS).flat().find(p => p.id === id);
 export const other = team => team === 'LAL' ? 'SAC' : 'LAL';
 export function rngFrom(seed) { let x=seed>>>0; return () => { x=(x+0x6D2B79F5)|0; let t=Math.imul(x^x>>>15,1|x); t^=t+Math.imul(t^t>>>7,61|t); return ((t^t>>>14)>>>0)/4294967296; }; }
 export function initialState(seed=2002) {
-  const lineups = Object.fromEntries(Object.entries(TEAMS).map(([t,ps])=>[t,ps.slice(0,5).map(p=>p.id)]));
-  return {version:1,seed,quarter:1,clock:720,shotClock:24,elapsed:0,turn:0,score:{LAL:0,SAC:0},possession:'LAL',handler:lineups.LAL[0],zone:'弧頂',lineups,fouls:{},teamFouls:{LAL:0,SAC:0},timeouts:{LAL:6,SAC:6},stamina:Object.fromEntries(Object.values(TEAMS).flat().map(p=>[p.id,100])),sets:{LAL:'triangle',SAC:'motion'},defense:{LAL:'man',SAC:'man'},phase:'playing',log:[],last:{kind:'start',points:0}};
+  const lineups = {LAL:['LAL2','LAL0','LAL3','LAL4','LAL1'],SAC:['SAC3','SAC2','SAC1','SAC0','SAC4']};
+  return {version:1,seed,quarter:1,clock:720,shotClock:24,elapsed:0,turn:0,score:{LAL:0,SAC:0},possession:'LAL',handler:'LAL0',zone:'弧頂',lineups,fouls:{},teamFouls:{LAL:0,SAC:0},timeouts:{LAL:6,SAC:6},stamina:Object.fromEntries(Object.values(TEAMS).flat().map(p=>[p.id,100])),sets:{LAL:'triangle',SAC:'motion'},defense:{LAL:'man',SAC:'man'},phase:'playing',log:[],last:{kind:'start',points:0}};
 }
 export const bench = (s,t) => TEAMS[t].filter(p=>!s.lineups[t].includes(p.id) && (s.fouls[p.id]||0)<6);
 export const matchup = s => s.lineups[other(s.possession)][s.lineups[s.possession].indexOf(s.handler)] || s.lineups[other(s.possession)][0];
@@ -14,7 +14,7 @@ export function options(s) {
   if(s.phase!=='playing') return [];
   return [...s.lineups[s.possession].filter(id=>id!==s.handler).map(id=>({id:'pass:'+id,label:'傳給 '+player(id).name})),...Object.entries({drive:'切入',pullup:'急停跳投',three:'三分出手',post:'低位單打',screen:'呼叫擋拆',hold:'持球重整'}).map(([id,label])=>({id,label}))];
 }
-function switchBall(s,t=other(s.possession)) { s.possession=t; s.handler=s.lineups[t][0]; s.shotClock=24; s.zone='弧頂'; }
+function switchBall(s,t=other(s.possession)) { s.possession=t; s.handler=s.lineups[t][0]; s.shotClock=24; s.zone='弧頂'; s.advantage=0; }
 function rebound(s,rng) {
   const offense=s.possession, defense=other(offense);
   const strength=s.lineups[offense].reduce((n,id)=>n+(player(id).orb_per_g||0),0);

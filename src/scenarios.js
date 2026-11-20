@@ -11,5 +11,7 @@ export function momentState(id) {
   const s=initialState();
   if(m.quarter) { Object.assign(s,{quarter:m.quarter,clock:m.clock,score:{...m.score},possession:m.possession,handler:m.handler,shotClock:Math.min(24,m.clock),elapsed:(m.quarter-1)*720+(720-m.clock)}); }
   s.moment=id;
+  if(s.quarter>4) s.elapsed=2880+(s.quarter-5)*300+(300-s.clock);
+  if(id==='g4') s.lineups.SAC[s.lineups.SAC.indexOf('SAC1')]='SAC5';
   return s;
 }

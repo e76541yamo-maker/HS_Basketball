@@ -12,6 +12,8 @@ const clock=x=>`${Math.floor(x/60)}:${Math.floor(x%60).toString().padStart(2,'0'
 let state=momentState('start'),branches=[],previous=null,selected='pullup',simulation=null,worker=null,request=0,aiRequest=0;
 try { const saved=restore(localStorage.getItem(STORAGE_KEY)); if(saved) ({state,branches,previous}=saved); } catch {}
 let decision={};
+let aiEnabled=false;
+fetch('/api/ai-status').then(r=>r.json()).then(data=>{ aiEnabled=Boolean(data.enabled); if(aiEnabled) analysis(); }).catch(()=>{});
 function save() { try { localStorage.setItem(STORAGE_KEY,JSON.stringify({state,branches,previous})); $('#save-status').textContent='本機已儲存'; } catch { $('#save-status').textContent='儲存空間不足'; } }
 function resetSelection() { selected='pullup'; decision={}; simulation=null; request++; }
 function update(next) { previous=copy(state); state=next; resetSelection(); save(); render(); }
@@ -21,6 +23,7 @@ function analysis() {
   $('#source').textContent='規則引擎';
   $('#analysis').innerHTML=`<p class="analysis-context">${esc(a.summary)}</p><div class="argument-grid">${a.points.map(p=>`<details class="argument"><summary><span class="sign ${p.sign==='−'?'negative':''}">${p.sign}</span>${esc(p.text)}</summary><p>${esc(p.detail)}</p><details><summary>查看引用資料</summary>${facts(p.facts)}</details></details>`).join('')}</div><p class="contingency"><b>備案</b> ${esc(a.contingency[0])}</p>`;
   const id=++aiRequest;
+  if(!aiEnabled) return;
   fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({facts:{quarter:state.quarter,clock:state.clock,shotClock:state.shotClock,score:state.score,action:selected,stats:a.facts},points:{pro:a.pro,con:a.con,attack:a.attack,contingency:a.contingency}})})
     .then(r=>r.json()).then(data=>{ if(id!==aiRequest||data.source!=='Claude') return; $('#source').textContent='Claude'; const p=document.createElement('p'); p.className='ai-rewrite'; p.textContent=data.points.pro[0]+'；'+data.points.con[0]; $('#analysis').append(p); }).catch(()=>{});
 }
@@ -40,12 +43,16 @@ function render() {
   $('#simulation').innerHTML=simulation?`<div class="simulation-result"><b>模擬比較 <span class="tag est">估計</span></b><p>${simulation.count} 次完整比賽・相同種子</p><div><span>所選策略<br><strong>${pct(simulation.selected.winProbability)}</strong> 勝率<br>${simulation.selected.expectedPoints.toFixed(2)} 預期得分</span><span>基準急停<br><strong>${pct(simulation.baseline.winProbability)}</strong> 勝率<br>${simulation.baseline.expectedPoints.toFixed(2)} 預期得分</span></div><small>預期得分只計本次持球；勝率推演到終場。樣本誤差與模型偏差仍存在。</small></div>`:'';
   $('#resources').innerHTML=['LAL','SAC'].map(t=>`<section class="resource-section"><div class="team-heading"><span class="team-symbol ${t.toLowerCase()}">${short[t][0]}</span><div><h3>${names[t]}</h3><small>團隊犯規 ${s.teamFouls[t]} · 暫停 ${s.timeouts[t]}</small></div><button data-timeout="${t}" ${!s.timeouts[t]||final?'disabled':''}>暫停</button></div><p class="roster-label">場上陣容 <span>體力為估計</span></p>${s.lineups[t].map(id=>rosterRow(id,s)).join('')}<details class="bench"><summary>板凳球員 · ${bench(s,t).length} 人可用</summary>${TEAMS[t].filter(p=>!s.lineups[t].includes(p.id)).map(p=>rosterRow(p.id,s)).join('')}</details></section>`).join('');
   $('#log').innerHTML=[...s.log].reverse().map(e=>`<li>第 ${e.turn} 回合 · ${esc(e.kind)} · ${e.points} 分</li>`).join('');
+  document.querySelectorAll('.resource-section').forEach((section,i)=>{
+    const t=['LAL','SAC'][i];
+    section.insertAdjacentHTML('beforeend',`<details class="guide resource-guide"><summary>換人與暫停的取捨</summary><details><summary>＋ 讓板凳分擔負荷</summary><p>場下恢復體力，替補立即承接原對位；換下的球員可以再上場。</p><details><summary>查看引用資料</summary>${facts([{label:'板凳可用',value:bench(s,t).length,source:'實際'},{label:'體力恢復',value:'每秒 0.09',source:'估計'}])}</details></details><details><summary>− 暫停有限，換人改變投籃能力</summary><p>暫停恢復體力但不重設進攻時間；犯滿球員不可再上場。</p><details><summary>查看引用資料</summary>${facts([{label:'剩餘暫停',value:s.timeouts[t],source:'實際'},{label:'暫停體力恢復',value:8,source:'估計'}])}</details></details><p>備案：若沒有暫停，從球員資料選擇替補，保留末節可用資源。</p></details>`);
+  });
   analysis();
 }
 function rosterRow(id,s) { const p=player(id),st=s.stamina[id]; return `<button class="roster-row" data-player="${id}"><span class="player-initial">${esc(p.name.split(' ').at(-1)[0])}</span><span><b>${esc(p.name)}</b><small>${p.pts_per_g} 分 · ${p.trb_per_g} 籃板 · 犯規 ${s.fouls[id]||0}</small><span class="stamina-track"><span style="width:${st}%"></span></span></span><em>${Math.round(st)}</em></button>`; }
 function openPlayer(id) {
   const p=player(id),t=id.startsWith('LAL')?'LAL':'SAC',on=state.lineups[t].includes(id),s=state;
-  $('#player-detail').innerHTML=`<p class="eyebrow">${names[t]} · ${on?'場上':'板凳'}</p><h2>${esc(p.name)}</h2><p class="muted">2001–02 例行賽・每場平均</p><div class="player-stats">${[['得分',p.pts_per_g],['籃板',p.trb_per_g],['助攻',p.ast_per_g],['抄截',p.stl_per_g],['阻攻',p.blk_per_g],['失誤',p.tov_per_g],['投籃',pct(p.fg_pct)],['三分',pct(p.fg3_pct)],['罰球',pct(p.ft_pct)]].map(([k,v])=>`<div><small>${k} <i>實際</i></small><strong>${v??'無樣本'}</strong></div>`).join('')}</div><p>體力 <b>${Math.round(s.stamina[id])}</b> <span class="tag est">估計</span> · 個人犯規 ${s.fouls[id]||0} <span class="tag">目前狀態</span></p>${p.wcf?`<p class="wcf-stats">2002 西區決賽 <i>實際</i><br>出賽 ${p.wcf.g} · 得分 ${p.wcf.pts_per_g} · 籃板 ${p.wcf.trb_per_g} · 助攻 ${p.wcf.ast_per_g}</p>`:''}<p><a href="${p.url}" target="_blank" rel="noopener">Basketball Reference 年度資料 ↗</a></p>${!on&&(s.fouls[id]||0)<6&&s.phase==='playing'?`<label>替換場上球員<select id="sub-out">${s.lineups[t].map(q=>`<option value="${q}">${esc(player(q).name)}</option>`).join('')}</select></label><button id="sub-in" class="primary" data-team="${t}" data-in="${id}">執行換人</button>`:''}${p.name.includes('Stojak')?'<p class="scenario-note">西區決賽僅出賽三場；傷勢期間是否可用不做逐日限制。歷史根節點使用重建陣容。</p>':''}`;
+  $('#player-detail').innerHTML=`<p class="eyebrow">${names[t]} · ${on?'場上':'板凳'}</p><h2>${esc(p.name)}</h2><p class="muted">2001–02 例行賽・每場平均</p><div class="player-stats">${[['得分',p.pts_per_g],['籃板',p.trb_per_g],['助攻',p.ast_per_g],['抄截',p.stl_per_g],['阻攻',p.blk_per_g],['失誤',p.tov_per_g],['投籃',pct(p.fg_pct)],['三分',pct(p.fg3_pct)],['罰球',pct(p.ft_pct)]].map(([k,v])=>`<div><small>${k} <i>實際</i></small><strong>${v??'無樣本'}</strong></div>`).join('')}</div><p>體力 <b>${Math.round(s.stamina[id])}</b> <span class="tag est">估計</span> · 個人犯規 ${s.fouls[id]||0} <span class="tag">目前狀態</span></p>${p.wcf?`<p class="wcf-stats">2002 西區決賽 <i>實際</i><br>出賽 ${p.wcf.g} · 得分 ${p.wcf.pts_per_g} · 籃板 ${p.wcf.trb_per_g} · 助攻 ${p.wcf.ast_per_g}</p>`:''}<p><a href="${p.url}" target="_blank" rel="noopener">Basketball Reference 年度資料 ↗</a></p>${!on&&(s.fouls[id]||0)<6&&s.phase==='playing'?`<label>替換場上球員<select id="sub-out">${s.lineups[t].map(q=>`<option value="${q}">${esc(player(q).name)}</option>`).join('')}</select></label><button id="sub-in" class="primary" data-team="${t}" data-in="${id}">執行換人</button>`:''}${p.name.includes('Stojak')?'<p class="scenario-note">實際：西區決賽只在第五、六、七戰出賽，第四戰未登錄上場。模型不限制逐日傷勢可用性。</p>':''}`;
   $('#player-dialog').showModal();
 }
 document.addEventListener('click',e=>{
@@ -67,6 +74,6 @@ document.addEventListener('click',e=>{
     }
   } catch { $('#notice').textContent='此操作目前無法執行。'; }
 });
-document.addEventListener('change',e=>{ if(e.target.dataset.layer) { decision[e.target.dataset.layer]=e.target.value; simulation=null; request++; analysis(); } });
+document.addEventListener('change',e=>{ if(e.target.dataset.layer) { decision[e.target.dataset.layer]=e.target.value; simulation=null; request++; $('#simulation').innerHTML=''; $('#simulate').disabled=state.phase==='final'; analysis(); } });
 $('#player-dialog').addEventListener('click',e=>{ if(e.target===$('#player-dialog')) $('#player-dialog').close(); });
 render();

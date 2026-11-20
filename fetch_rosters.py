@@ -42,7 +42,10 @@ def main():
                 p[key] = float(row[source_key]) if row.get(source_key) else None
             players.append(p)
         teams[team] = players
-    series = Tables(); series.feed((ROOT / 'wcf-source.html').read_text().replace('<!--', '').replace('-->', ''))
+    series_url = 'https://www.basketball-reference.com/playoffs/2002-nba-western-conference-finals-lakers-vs-kings.html'
+    cached = ROOT / 'wcf-source.html'
+    html = cached.read_text() if cached.exists() else urllib.request.urlopen(series_url, timeout=30).read().decode()
+    series = Tables(); series.feed(html.replace('<!--', '').replace('-->', ''))
     for ps in teams.values():
         for p in ps:
             for rows in series.tables.values():
