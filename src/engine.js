@@ -40,12 +40,13 @@ export function play(state,action) {
   s.last={kind:id,points:0,seconds,team:offense,handler:p.id};
   if(s.shotClock<=0) { s.last.kind='進攻時間違例'; switchBall(s); }
   else if(rng()<Math.min(.16,.025+(p.tov_per_g||1)*.009+(player(defender).stl_per_g||0)*.009)) { s.last.kind='失誤・抄截'; switchBall(s); }
-  else if(id.startsWith('pass:')) { s.handler=id.slice(5); s.zone=['左翼','右翼','禁區','底角'][Math.floor(rng()*4)]; s.last.kind='傳球'; }
-  else if(id==='hold'||id==='screen') { s.last.kind=id==='screen'?'擋拆換位':'持球重整'; s.zone=id==='screen'?'罰球線':'弧頂'; }
+  else if(id.startsWith('pass:')) { s.handler=id.slice(5); s.advantage=s.sets[offense]==='motion'?.025:0; s.zone=['左翼','右翼','禁區','底角'][Math.floor(rng()*4)]; s.last.kind='傳球'; }
+  else if(id==='hold'||id==='screen') { s.last.kind=id==='screen'?'擋拆換位':'持球重整'; s.advantage=id==='screen'?(s.defense[other(offense)]==='switch'?.01:.04):0; s.zone=id==='screen'?'罰球線':'弧頂'; }
   else {
     const three=id==='three', value=three?3:2;
     const defense=s.defense[other(offense)], fatigue=(100-s.stamina[p.id])*.001;
-    const adjustment=(id==='post'&&p.trb_per_g>8?.045:0)+(s.sets[offense]==='triangle'&&id==='post'?.02:0)-(defense==='double'&&p.name.includes("O'Neal")?.09:0);
+    const adjustment=(s.advantage||0)+(id==='post'&&p.trb_per_g>8?.045:0)+(s.sets[offense]==='triangle'&&id==='post'?.02:0)-(defense==='double'&&p.name.includes("O'Neal")?.09:0);
+    s.advantage=0;
     const made=rng()<Math.max(.12,(three?p.fg3_pct??.25:p.fg_pct??.42)+adjustment-fatigue);
     const shootingFoul=rng()<(defense==='hack'?.3:id==='drive'||id==='post'?.13:.055);
     s.last.kind=made?'投籃命中':'投籃未中';
