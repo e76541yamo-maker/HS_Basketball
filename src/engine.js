@@ -183,7 +183,7 @@ export function simulatePossession(state,decision={}) {
  s.clock=Math.max(0,s.clock-used);s.score[off]+=points;
  if(!technical){s.turn++;s.possession=def;s.shotClock=24;}
  s.seed=Math.floor(rng()*4294967296)>>>0;
- s.decisionReasons=technical?['技術罰球結束・保留球權']:foul?['犯規／罰球結束']:points>0?['進球']:s.quarter>=4&&s.clock<=300?['末節每回合']:[];
+ s.decisionReasons=technical?['額外罰球結束・保留球權']:foul?['犯規／罰球結束']:points>0?['進球']:s.quarter>=4&&s.clock<=300?['末節每回合']:[];
  s.last={kind,team:off,points,seconds:used,offensiveRebounds:orb,foul};
  appendLog(s,'估計・第 '+s.turn+' 回合 '+off+' ＋'+points+' 分・'+(PLAY_TYPES[action]?.label||'罰球')+(orb?'・進攻籃板延續 '+orb+' 次':''));
  periodEnd(s);
