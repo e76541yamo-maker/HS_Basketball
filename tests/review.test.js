@@ -70,3 +70,10 @@ test('technical free throw simulation marks divergence without changing turn or 
  assert.equal(n.turn,s.turn);assert.equal(n.possession,s.possession);assert.equal(n.diverged,true);
  assert.match(monteCarlo(n,policy(n),1).baselineLabel,/目前陣容/);
 });
+
+test('technical FT rollouts evaluate the subsequent complete live possession',()=>{
+ const s=DATA.windows.map((_,i)=>replayState(i)).find(s=>s.pendingTechnicalFreeThrows>0);
+ const r=monteCarlo(s,{action:'freeThrows'},64);
+ assert.ok(r.selected.expectedPoints>1);
+ assert.ok(r.riskBranches.every(r=>r.remedies.every(x=>x.state.turn>s.turn)));
+});

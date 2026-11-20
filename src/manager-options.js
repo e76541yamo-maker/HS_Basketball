@@ -34,6 +34,9 @@ function evaluate(s,decision,count,seed,team,remedyDefense) {
   const start=copy(s);start.seed=(seed+Math.imul(i+1,2654435761))>>>0;
   const nextDecision=state=>({...policy(state),...(remedyDefense&&other(state.possession)===team?{defense:remedyDefense}:{})});
   let next=simulatePossession(start,remedyDefense?nextDecision(start):decision);
+  let continuations=0;
+  while(next.phase!=='final'&&next.turn===start.turn&&continuations++<2000)next=simulatePossession(next,nextDecision(next));
+  if(continuations>=2000)throw new Error('推演未能結束');
   modelWins+=winProbability(next,team);
   const kind=next.last.kind==='foul'?'empty':next.last.kind;
   outcomes[kind]++;points+=next.score[team]-s.score[team];
