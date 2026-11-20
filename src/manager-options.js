@@ -50,7 +50,7 @@ export function monteCarlo(s,decision={},count=s.quarter>=4&&s.clock<=300?512:64
  if(!Number.isInteger(count)||count<1||count>4096||s.phase!=='playing')throw new Error('無可比較的回合');
  const selectedAction=decision.action==='replay'?realChoice(s):decision.action||'pnr';
  const chosen={...decision,action:freeThrowsRemaining(s)?'freeThrows':selectedAction},team=s.possession;
- const historical=s.turn===s.possessionIndex&&DATA.possessions[s.possessionIndex]?.team===s.possession;
+ const historical=!s.diverged&&s.turn===s.possessionIndex&&DATA.possessions[s.possessionIndex]?.team===s.possession;
  const baselineDecision=historical?{action:realChoice(s)}:policy(s);
  const baselineLabel=historical?DATA.possessions[s.possessionIndex].description:'估計・目前陣容與球隊策略基準';
  const selected=evaluate(s,chosen,count,seed,team),baseline=evaluate(s,baselineDecision,count,seed,team);

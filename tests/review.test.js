@@ -63,3 +63,10 @@ test('preview gives no scoring odds when the fastest attempt misses the buzzer',
   assert.equal(preview.winProbabilityAfter,winProbability(simulatePossession(s,{action}),'CLE'));
  }
 });
+
+test('technical free throw simulation marks divergence without changing turn or team',()=>{
+ const s=DATA.windows.map((_,i)=>replayState(i)).find(s=>s.pendingTechnicalFreeThrows>0);
+ const n=simulatePossession(s,{action:'freeThrows'});
+ assert.equal(n.turn,s.turn);assert.equal(n.possession,s.possession);assert.equal(n.diverged,true);
+ assert.match(monteCarlo(n,policy(n),1).baselineLabel,/目前陣容/);
+});

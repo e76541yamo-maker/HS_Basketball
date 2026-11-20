@@ -143,7 +143,7 @@ export function simulatePossession(state,decision={}) {
  if(action==='freeThrows'&&!freeThrowsRemaining(state))throw new Error('目前沒有待罰球');
  if(freeThrowsRemaining(state)&&action!=='freeThrows')throw new Error('罰球窗口只能調整換人、暫停或完成罰球');
  const s=copy(state),off=s.possession,def=other(off),rng=rngFrom(s.seed),d=distribution(s,action,decision);
- s.mode='simulation';s.plans[off].offense=PLAY_TYPES[action]?action:s.plans[off].offense;
+ s.mode='simulation';s.diverged=true;s.plans[off].offense=PLAY_TYPES[action]?action:s.plans[off].offense;
  if(decision.clock)s.plans[off].clock=decision.clock;
  if(decision.defense)s.plans[def].defense=decision.defense;
  let points=0,kind='empty',foul=false,orb=0,used=0;
