@@ -37,3 +37,11 @@ test('intentional foul preview uses penalty or retained inbound',()=>{
  const d=distribution(s,'pnr',{defense:'intentional'});
  assert.equal(ft.expectedPoints,2*(d.ftAdjustment??d.adjustment)*lineupAdjustment(s).ft);
 });
+
+test('advanced branches compare against the current team policy',()=>{
+ const s=simulatePossession(initialState(),{action:'roll'});
+ const r=monteCarlo(s,policy(s),1);
+ assert.match(r.baselineLabel,/目前陣容/);assert.equal(r.delta,0);assert.equal(r.modelDelta,0);
+ const historical=monteCarlo(initialState(),{action:'pnr'},1);
+ assert.equal(historical.baselineLabel,DATA.possessions[0].description);
+});
