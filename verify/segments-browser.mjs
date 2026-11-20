@@ -6,7 +6,9 @@ page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()
 const read=()=>page.evaluate(()=>JSON.parse(localStorage.getItem('courtside.possession.2015.v3')));
 const url=process.env.COURTSIDE_URL||'http://localhost:3107';
 try{
+ const openAnalysis=()=>page.locator('#analysis-details:not([open]) > summary').click();
  await page.goto(url);assert.equal(await page.locator('#play-mode').inputValue(),'segment');
+ await page.locator('.start-panel > summary').click();
  assert.equal(await page.locator('[data-segment]').count(),8);assert.match(await page.locator('#situation').innerText(),/第一階段/);
  for(const team of ['CLE','GSW']){
   await page.locator('#coach-team').selectOption(team);await page.locator('[data-segment="0"]').click();
@@ -14,19 +16,21 @@ try{
   while(!await page.locator('#execute').isDisabled()&&decisions<60){await page.locator('#execute').click();decisions++;}
   const s=(await read()).state;assert.equal(s.phase,'final');assert.deepEqual(s.score,{CLE:83,GSW:89});
   console.log('SEGMENT HISTORICAL UI:',team,decisions,'decisions; CLE 83–GSW 89; final');
+  await page.locator('#review-restart').click();
  }
  await page.locator('[data-segment="0"]').click();await page.locator('#coach-team').selectOption('CLE');
  const start=(await read()).state;
  await page.locator('#coach-tempo').selectOption('push');await page.locator('#coach-defense').selectOption('blitz');
  const target=await page.locator('#coach-target option').nth(1).getAttribute('value');await page.locator('#coach-target').selectOption(target);
  await page.locator('#coach-timeout').check();
+ await page.locator('#coach-lineup-details > summary').click();
  const selected=page.locator('[data-coach-player]:checked');const out=await selected.first().getAttribute('data-coach-player');
  await page.locator('[data-coach-player="'+out+'"]').uncheck();assert.equal(await page.locator('#execute').isDisabled(),true);
  const incoming=await page.locator('[data-coach-player]:not(:checked):not(:disabled)').last().getAttribute('data-coach-player');
  await page.locator('[data-coach-player="'+incoming+'"]').check();assert.equal(await page.locator('#execute').isDisabled(),false);
- await page.locator('#value-model').selectOption('impact');await page.locator('#wp-model').selectOption('brownian');
+ await openAnalysis();await page.locator('#value-model').selectOption('impact');await page.locator('#wp-model').selectOption('brownian');
  assert.equal(await page.locator('.model-table tbody tr').count(),3);assert.equal(await page.locator('.model-table thead th').count(),7);
- await page.reload();assert.equal(await page.locator('#coach-tempo').inputValue(),'push');assert.equal(await page.locator('#coach-defense').inputValue(),'blitz');assert.equal(await page.locator('#coach-target').inputValue(),target);
+ await page.reload();await openAnalysis();await page.locator('.start-panel > summary').click();assert.equal(await page.locator('#coach-tempo').inputValue(),'push');assert.equal(await page.locator('#coach-defense').inputValue(),'blitz');assert.equal(await page.locator('#coach-target').inputValue(),target);
  await page.locator('#simulate').click();await page.locator('.segment-histogram').waitFor({timeout:120000});
  assert.equal(await page.locator('[data-segment-remedy]').count(),4);assert.match(await page.locator('.simulation-result').innerText(),/百分位/);
  await page.locator('[data-segment-remedy]').first().click();
@@ -43,6 +47,7 @@ try{
   await page.locator('#execute').click();
  }
  assert.equal((await read()).state.phase,'final');console.log('SEGMENT ALTERNATIVE UI: complete simulated game');
+ await page.locator('#review-restart').click();
  await page.locator('[data-segment-clutch]').click();
  if((await read()).state.possession==='CLE')await page.locator('#execute').click();
  assert.equal((await read()).state.possession,'GSW');assert.equal(await page.locator('#clock-call').isDisabled(),true);

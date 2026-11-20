@@ -16,3 +16,4 @@ with urllib.request.urlopen(request, timeout=60) as response:
     print('HTTP', response.status)
     print(json.dumps(result, ensure_ascii=False, indent=2))
     assert result['source'] == 'Claude', 'HTTP 200 fallback is not live Claude'
+    assert all('；若' in point and '｜' in point for card in result['points'].values() for point in card)

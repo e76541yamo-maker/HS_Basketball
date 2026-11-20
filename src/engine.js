@@ -194,7 +194,7 @@ export function simulatePossession(state,decision={}) {
  periodEnd(s);
  return s;
 }
-export function play(state,decision='replay') {
+export function play(state,decision='replay',onPossession) {
  const action=typeof decision==='string'?decision:decision.action;
  if(state.phase!=='playing')throw new Error('比賽已結束');
  if(action==='replay') {
@@ -202,7 +202,8 @@ export function play(state,decision='replay') {
   return replayNext(state);
  }
  let s=simulatePossession(state,decision),automatic=0;
- while(s.phase==='playing'&&!s.decisionReasons.length) {s=simulatePossession(s,policy(s));automatic++;}
+ onPossession?.(s.last);
+ while(s.phase==='playing'&&!s.decisionReasons.length) {s=simulatePossession(s,policy(s));onPossession?.(s.last);automatic++;}
  s.autoAdvanced=automatic;return s;
 }
 export function manage(state,decision) {

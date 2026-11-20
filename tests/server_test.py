@@ -66,6 +66,22 @@ class AnalysisTest(unittest.TestCase):
         with patch.dict(os.environ, {'ANTHROPIC_API_KEY': 'fixture-key'}), patch('server.urllib.request.urlopen', return_value=io.BytesIO(raw)):
             self.assertEqual(server.claude_analysis({'facts': facts, 'points': points})['source'], 'Claude')
 
+    def test_conditional_rewrite_preserves_source_citation_and_condition(self):
+        original = {**POINTS, 'pro': ['實際｜目前比分 83：89：先看分差；若下一波反轉領先，就要重選。']}
+        edited = {**original, 'pro': [original['pro'][0].replace('先看分差', '先確認分差')]}
+        server.validated_points(edited)
+        server.validate_grounding(edited, PAYLOAD['facts'], original)
+        for old, new in [('實際', '估計'), ('83：89', '89：83'), ('下一波', '比分'), ('；若', '。')]:
+            with self.assertRaises(ValueError):
+                server.validate_grounding({**edited, 'pro': [edited['pro'][0].replace(old, new)]}, PAYLOAD['facts'], original)
+        grounded = {key: original['pro'] for key in POINTS}
+        claims = dict.fromkeys(POINTS, '先確認分差')
+        raw = json.dumps({'stop_reason': 'end_turn', 'content': [{'type': 'text', 'text': json.dumps(claims)}]}).encode()
+        with patch.dict(os.environ, {'ANTHROPIC_API_KEY': 'fixture-key'}), patch('server.urllib.request.urlopen', return_value=io.BytesIO(raw)):
+            result = server.claude_analysis({**PAYLOAD, 'points': grounded})
+        self.assertEqual(result['source'], 'Claude')
+        self.assertEqual(result['points']['pro'], edited['pro'])
+
 
 class HTTPTest(unittest.TestCase):
     def test_incomplete_body_times_out(self):
