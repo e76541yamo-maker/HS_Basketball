@@ -28,17 +28,18 @@ export function analyze(s,decision={}) {
   points:[{sign:'＋',text:'支持這個選擇',detail:pro.join(''),facts:[...actual,...model]},
   {sign:'−',text:'代價與限制',detail:con.join(''),facts:cost}]};
 }
-function evaluate(s,decision,count,seed,team) {
+function evaluate(s,decision,count,seed,team,remedyDefense) {
  let wins=0,margin=0,points=0,modelWins=0;const outcomes={score:0,empty:0,turnover:0},risks={};
  for(let i=0;i<count;i++) {
   const start=copy(s);start.seed=(seed+Math.imul(i+1,2654435761))>>>0;
-  let next=simulatePossession(start,decision);
+  const nextDecision=state=>({...policy(state),...(remedyDefense&&other(state.possession)===team?{defense:remedyDefense}:{})});
+  let next=simulatePossession(start,remedyDefense?nextDecision(start):decision);
   modelWins+=winProbability(next,team);
   const kind=next.last.kind==='foul'?'empty':next.last.kind;
   outcomes[kind]++;points+=next.score[team]-s.score[team];
   if(kind!=='score'&&!risks[kind])risks[kind]=copy(next);
   let turns=0;
-  while(next.phase!=='final'&&turns++<2000)next=simulatePossession(next,policy(next));
+  while(next.phase!=='final'&&turns++<2000)next=simulatePossession(next,nextDecision(next));
   if(next.phase!=='final')throw new Error('推演未能結束');
   wins+=Number(next.score[team]>next.score[other(team)]);
   margin+=next.score[team]-next.score[other(team)];
@@ -53,7 +54,7 @@ export function monteCarlo(s,decision={},count=s.quarter>=4&&s.clock<=300?512:64
  const riskBranches=Object.entries(selected.risks).filter(([,state])=>state.phase==='playing').map(([kind,state])=>{
   const remedies=['switch','drop','blitz','zone'].map((id,j)=>{
    const start=copy(state);start.plans[team].defense=id;
-   const r=evaluate(start,policy(start),Math.min(256,Math.max(64,count)),seed+700,team);
+   const r=evaluate(start,policy(start),Math.min(256,Math.max(64,count)),seed+700,team,id);
    delete r.risks;
    return {...r,id,label:DEFENSES[id],state:start};
   }).sort((a,b)=>b.expectedMargin-a.expectedMargin||b.winProbability-a.winProbability);
