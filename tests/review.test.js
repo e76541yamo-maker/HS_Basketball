@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {initialState,simulatePossession,copy,DATA,replayState,freeThrowsRemaining,policy,other,distribution,winProbability} from '../src/engine.js';
+import {initialState,simulatePossession,copy,DATA,replayState,freeThrowsRemaining,policy,other,distribution,winProbability,lineupAdjustment} from '../src/engine.js';
 import {monteCarlo} from '../src/manager-options.js';
+import {evaluateOption} from '../src/model-comparison.js';
 
 test('attempts after the buzzer cannot score or foul',()=>{
  for(let seed=0;seed<100;seed++){
@@ -24,4 +25,15 @@ test('technical free throws remain pending and preserve possession',()=>{
  assert.ok(s);assert.equal(freeThrowsRemaining(s),1);
  const n=simulatePossession(s,{action:'freeThrows'});
  assert.equal(n.possession,s.possession);assert.equal(n.turn,s.turn);assert.equal(n.clock,s.clock);assert.equal(freeThrowsRemaining(n),0);
+});
+
+test('intentional foul preview uses penalty or retained inbound',()=>{
+ const s=initialState();s.quarter=4;s.clock=20;s.score={CLE:85,GSW:80};
+ const preview=evaluateOption(s,{action:'pnr',defense:'intentional'});
+ const next=simulatePossession(s,{action:'pnr',defense:'intentional'});
+ assert.equal(preview.expectedPoints,0);assert.equal(preview.winProbabilityAfter,winProbability(next,'CLE'));
+ s.teamFouls.GSW=4;
+ const ft=evaluateOption(s,{action:'pnr',defense:'intentional'});
+ const d=distribution(s,'pnr',{defense:'intentional'});
+ assert.equal(ft.expectedPoints,2*(d.ftAdjustment??d.adjustment)*lineupAdjustment(s).ft);
 });

@@ -1,13 +1,23 @@
-import {distribution,options,realChoice,other,winProbability} from './engine.js';
+import {distribution,options,realChoice,other,winProbability,freeThrowsRemaining,lineupAdjustment,bonus} from './engine.js';
 import {VALUE_MODELS,WP_MODELS,valueModel,wpModel} from './evaluation-models.js';
 
 export function evaluateOption(s,decision={}) {
  const action=decision.action==='replay'?realChoice(s):decision.action||'pnr';
  const d=distribution(s,action,decision),team=s.possession,before=winProbability(s,team);
+ const intentional=!freeThrowsRemaining(s)&&(decision.defense||s.plans[other(team)].defense)==='intentional'&&s.score[other(team)]<s.score[team];
+ const seconds=intentional?Math.min(2,s.clock):d.seconds;
+ const penalty=intentional&&bonus({...s,clock:s.clock-seconds},team);
+ const retain=intentional&&!penalty||freeThrowsRemaining(s)>0&&s.pendingTechnicalFreeThrows===freeThrowsRemaining(s);
+ let probabilities=d.points.map((p,i)=>(1-d.turnover)*p+(i===0?d.turnover:0));
+ if(intentional){
+  const ft=Math.min(1,(d.ftAdjustment??d.adjustment)*lineupAdjustment(s).ft);
+  probabilities=penalty?[(1-ft)**2,2*ft*(1-ft),ft**2,0,0]:[1,0,0,0,0];
+ }
  let expectedPoints=0,winProbabilityAfter=0,leverage=0;
  for(let points=0;points<5;points++) {
-  const probability=(1-d.turnover)*d.points[points]+(points===0?d.turnover:0);
-  const next={...s,score:{...s.score,[team]:s.score[team]+points},clock:Math.max(0,s.clock-d.seconds),possession:other(team)};
+  const probability=probabilities[points];
+  const next={...s,score:{...s.score,[team]:s.score[team]+points},clock:Math.max(0,s.clock-seconds),possession:retain?team:other(team)};
+  if(intentional)next.teamFouls={...s.teamFouls,[other(team)]:s.teamFouls[other(team)]+1};
   if(next.clock===0) {
    if(s.quarter>=4&&next.score.CLE!==next.score.GSW)next.phase='final';
    else {next.quarter++;next.clock=next.quarter>4?300:720;}
