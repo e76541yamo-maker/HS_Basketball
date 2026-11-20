@@ -17,7 +17,10 @@ export function evaluateOption(s,decision={}) {
  for(let points=0;points<5;points++) {
   const probability=probabilities[points];
   const next={...s,score:{...s.score,[team]:s.score[team]+points},clock:Math.max(0,s.clock-seconds),possession:retain?team:other(team)};
-  if(intentional)next.teamFouls={...s.teamFouls,[other(team)]:s.teamFouls[other(team)]+1};
+  if(intentional){
+   next.teamFouls={...s.teamFouls,[other(team)]:s.teamFouls[other(team)]+1};
+   if(next.clock<=120)next.lateFouls={...s.lateFouls,[other(team)]:s.lateFouls[other(team)]+1};
+  }
   if(next.clock===0) {
    if(s.quarter>=4&&next.score.CLE!==next.score.GSW)next.phase='final';
    else {next.quarter++;next.clock=next.quarter>4?300:720;}
