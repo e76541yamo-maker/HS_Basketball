@@ -53,6 +53,19 @@ try{
  await page.locator('#coach-tempo').selectOption('slow');await page.locator('#simulate').click();await page.locator('.segment-histogram').waitFor({timeout:120000});
  await page.evaluate(()=>document.fonts.ready);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
  await page.screenshot({path:'/home/ubuntu/shots/basketball-segment-mobile.png',fullPage:true});
+ await page.locator('[data-segment="0"]').click();await page.locator('[data-coach-action="replay"]').click();
+ await page.locator('#play-mode').selectOption('possession');
+ await page.locator('[data-action="transition"]').click();await page.locator('#execute').click();
+ assert.equal((await read()).state.mode,'simulation');assert.equal((await read()).state.coach.execute,'replay');
+ await page.locator('#play-mode').selectOption('segment');
+ assert.equal(await page.locator('[data-coach-action="replay"]').count(),0);
+ assert.equal(await page.locator('[data-coach-action="run"]').evaluate(el=>el.classList.contains('selected')),true);
+ const expected=await page.evaluate(async()=>{
+  const {runSegment}=await import('/src/segments.js');return runSegment(JSON.parse(localStorage.getItem('courtside.possession.2015.v3')).state);
+ });
+ await page.locator('#execute').click();const continued=(await read()).state;
+ assert.equal(continued.mode,'simulation');assert.deepEqual(continued.score,expected.score);assert.deepEqual(continued.timeouts,expected.timeouts);assert.equal(continued.clock,expected.clock);
+ console.log('SEGMENT MODE SWITCH: stale replay choice continues simulation without overwriting branch score/resources');
  await page.locator('#play-mode').selectOption('possession');await page.reload();assert.equal(await page.locator('#play-mode').inputValue(),'possession');
  assert.deepEqual(errors,[]);
  console.log('SEGMENT BROWSER PASS: both teams / history / coached full game / lineup / tempo / target / timeout / models / histogram / remedies / undo / branches / reload / mobile / persisted mode; console errors: 0');

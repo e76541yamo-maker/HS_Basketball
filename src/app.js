@@ -64,6 +64,7 @@ function modelControls(){
  for(const id of ['value-model','wp-model'])$(id).onchange=()=>{state={...state,valueModel:$('value-model').value,wpModel:$('wp-model').value};revision++;simulation=null;segmentCache=null;persist();render();};
 }
 function segmentControls(){
+ if(state.mode!=='replay'||state.diverged)segmentAction='run';
  modelControls();
  if(!segmentCache)segmentCache={};
  $('actions').innerHTML=(state.mode==='replay'?'<button class="action '+(segmentAction==='replay'?'selected':'')+'" data-coach-action="replay">沿歷史區段重播</button>':'')+'<button class="action '+(segmentAction==='run'?'selected':'')+'" data-coach-action="run">執行教練策略・建立分支</button>';
@@ -140,7 +141,7 @@ document.addEventListener('click',e=>{
 });
 $('close-player').onclick=()=>$('player-dialog').close();
 $('execute').onclick=()=>{try{
- if(segmentMode())transition((coachPhase()?segmentAction==='replay':action==='replay')?historicalSegment(state):runSegment(state,state.coach,clutch(state)?decision():undefined),'區段／末段決策完成，其餘回合已自動前進。');
+ if(segmentMode())transition(state.mode==='replay'&&!state.diverged&&(coachPhase()?segmentAction==='replay':action==='replay')?historicalSegment(state):runSegment(state,state.coach,clutch(state)?decision():undefined),'區段／末段決策完成，其餘回合已自動前進。');
  else transition(play(state,decision()),action==='replay'?'沿實際回合前進，活球區段已自動略過。':'完整回合已推演；非決策區段自動前進。');
 }catch(e){message(e.message);}};
 $('undo').onclick=()=>{if(previous){const n=previous;previous=copy(state);state=modeState(n,n.playMode||state.playMode);revision++;simulation=null;segmentCache=null;replayStep=0;action=options(state)[0]?.id||'';segmentAction=state.coach?.execute||(state.mode==='replay'?'replay':'run');clockCall=state.plans[state.possession].clock;defense=state.plans[state.possession==='CLE'?'GSW':'CLE'].defense;persist();render();message('已復原。');}};
