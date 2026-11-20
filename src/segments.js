@@ -112,10 +112,11 @@ export function runSegment(state,settings=state.coach,decision) {
   if(choice?.action==='freeThrows'&&!freeThrowsRemaining(s))choice={...policy(s),defense:choice.defense};
   s=advanceSimulation(s,s.coach,choice);count++;
   if(count>1000)throw new Error('區段未能結束');
+  if(s.quarter!==q)break;
   if(late){if(s.turn>state.turn&&(s.phase==='final'||managedStop(s)))break;}
-  else if(s.quarter!==q||elapsed(s)>=end||clutch(s))break;
+  else if(elapsed(s)>=end||clutch(s))break;
  }while(s.phase==='playing');
- while(s.phase!=='final'&&clutch(s)&&!managedStop(s))s=advanceSimulation(s,s.coach);
+ while(s.phase!=='final'&&s.quarter===q&&clutch(s)&&!managedStop(s))s=advanceSimulation(s,s.coach);
  s.coach.lineup=[...s.lineups[s.coach.team]];
  if(!s.lineups[other(s.coach.team)].includes(s.coach.target))s.coach.target='';
  s.segmentPossessions=s.turn-state.turn;

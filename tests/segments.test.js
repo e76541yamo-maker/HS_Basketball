@@ -121,3 +121,13 @@ test('clutch defensive remedies protect the managed team without changing oppone
  assert.ok(Math.abs(result.selected.expectedMargin+offense.selected.expectedMargin)<1e-12);
  assert.throws(()=>monteCarlo(s,policy(s),1,1,'invalid'));
 });
+
+test('tied period endings return before an overtime possession for either managed team',()=>{
+ for(const team of ['CLE','GSW'])for(const quarter of [4,5]){
+  const s=segmentState(0,team);s.quarter=quarter;s.clock=.1;s.score={CLE:80,GSW:80};s.possession=team;
+  const next=runSegment(s,s.coach,{action:'pnr'});
+  assert.equal(next.quarter,quarter+1);assert.equal(next.clock,300);assert.equal(next.turn,s.turn+1);
+  assert.equal(next.phase,'playing');assert.deepEqual(next.score,s.score);assert.deepEqual(next.decisionReasons,['節次開始']);
+  assert.deepEqual(next.teamFouls,{CLE:0,GSW:0});assert.deepEqual(next.timeouts,{CLE:2,GSW:2});
+ }
+});
