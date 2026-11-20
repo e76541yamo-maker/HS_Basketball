@@ -309,6 +309,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         from urllib.parse import unquote, urlsplit
         path = unquote(urlsplit(self.path).path)
         allowed = {'/', '/index.html', '/manifest.webmanifest', '/src/app.js',
+                   '/src/branch-tree.js',
                    '/src/engine.js', '/src/simulation-worker.js', '/src/ai-analysis.js', '/src/style.css', '/src/fonts.css', '/src/rosters.json',
                    '/src/retrosheet.js', '/src/retrosheet-2008.json',
                    '/src/scenarios.js', '/src/scenarios-2008.json',
