@@ -42,7 +42,7 @@ Center: score, clock, estimated shot clock, possession, team fouls, bonus, remai
   downloaded mirror:
   https://raw.githubusercontent.com/sealneaward/nba-movement-data/master/data/12.25.2015.CLE.at.GSW.7z
 
-Committed `src/possession-game.json` contains **193 full possessions: CLE 96, GSW 97**, or **96.5 per team**; **144 decision windows** (the final transition to the game-over state is not a playing window). The independent box formula `FGA + .44*FTA - ORB + TOV` gives **98.94** per team, so 193 is within 2.5% of twice that approximate pace. The .44 formula is an estimate, not an exact possession-count oracle. Different period-end/FT definitions can move the count.
+Committed `src/possession-game.json` contains **193 full possessions: CLE 96, GSW 97**, or **96.5 per team**; **152 windows are marked for decisions**. The independent box formula `FGA + .44*FTA - ORB + TOV` gives **98.94** per team, so 193 is within 2.5% of twice that approximate pace. The .44 formula is an estimate, not an exact possession-count oracle. Different period-end/FT definitions can move the count.
 
 Exact final score: **CLE 83–GSW 89**. Independent totals: CLE 95 FGA / 25 FTA / 17 ORB / 11 TOV; GSW 78 / 27 / 8 / 16. All **25 player offensive rebounds** remain within possessions, plus **7 awarded team offensive continuations**. Team and player score totals reconcile. The previous tracking validation remains in `data/validation.json`: 63,908 deduplicated frames, 955 inferred holds, 404 inferred passes, 155/173 temporal shot matches (89.6%), 22/22 box-score player FGA/FG/points matches. These are alignment/box checks, not independent pass-accuracy measurements.
 
