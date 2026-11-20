@@ -80,24 +80,36 @@ test('technical FT rollouts evaluate the subsequent complete live possession',()
  assert.ok(r.riskBranches.every(r=>r.remedies.every(x=>x.state.turn>s.turn)));
 });
 
-test('technical FT points count as scoring even when the live continuation is empty',()=>{
+test('technical FT scoring and live continuation outcomes are independent',()=>{
  const s=DATA.windows.map((_,i)=>replayState(i)).find(s=>s.pendingTechnicalFreeThrows>0);
  const count=64,seed=20151225,expected={score:0,empty:0,turnover:0};
- let scoredBeforeEmpty=0;
+ const liveOutcomes={score:0,empty:0,turnover:0},riskStates={};
+ let scoredBeforeEmpty=0,scoredBeforeTurnover=0,totalPoints=0;
  for(let i=0;i<count;i++){
   const start=copy(s);start.seed=(seed+Math.imul(i+1,2654435761))>>>0;
   let next=simulatePossession(start,{action:'freeThrows'});
   while(next.phase!=='final'&&next.turn===start.turn)next=simulatePossession(next,policy(next));
   const points=next.score[s.possession]-s.score[s.possession];
-  if(points>0&&next.last.kind!=='score')scoredBeforeEmpty++;
-  expected[points>0?'score':next.last.kind==='turnover'?'turnover':'empty']++;
+  const liveKind=next.last.kind==='foul'?'empty':next.last.kind;
+  liveOutcomes[liveKind]++;totalPoints+=points;
+  if(points>0&&liveKind==='empty')scoredBeforeEmpty++;
+  if(points>0&&liveKind==='turnover')scoredBeforeTurnover++;
+  if(points>0)expected.score++;
+  const riskKind=liveKind==='turnover'?'turnover':points===0?'empty':null;
+  if(riskKind){expected[riskKind]++;riskStates[riskKind]??=next;}
  }
  assert.ok(scoredBeforeEmpty>0);
+ assert.ok(scoredBeforeTurnover>0);
  assert.ok(expected.empty>0);assert.ok(expected.turnover>0);
  const result=monteCarlo(s,{action:'freeThrows'},count,seed);
  assert.deepEqual(result.selected.outcomes,expected);
+ assert.deepEqual(result.selected.liveOutcomes,liveOutcomes);
+ assert.equal(result.selected.expectedPoints,totalPoints/count);
+ assert.ok(result.selected.outcomes.turnover>=scoredBeforeTurnover);
+ assert.ok(result.riskBranches.some(r=>r.kind==='turnover'));
  for(const risk of result.riskBranches){
   assert.equal(risk.count,expected[risk.kind]);
-  assert.ok(risk.remedies.every(r=>r.state.score[s.possession]===s.score[s.possession]));
+  assert.ok(risk.remedies.every(r=>JSON.stringify(r.state.score)===JSON.stringify(riskStates[risk.kind].score)));
+  if(risk.kind==='empty')assert.ok(risk.remedies.every(r=>r.state.score[s.possession]===s.score[s.possession]));
  }
 });

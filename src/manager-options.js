@@ -29,7 +29,7 @@ export function analyze(s,decision={}) {
   {sign:'−',text:'代價與限制',detail:con.join(''),facts:cost}]};
 }
 function evaluate(s,decision,count,seed,team,remedyDefense) {
- let wins=0,margin=0,points=0,modelWins=0;const outcomes={score:0,empty:0,turnover:0},risks={};
+ let wins=0,margin=0,points=0,modelWins=0;const outcomes={score:0,empty:0,turnover:0},liveOutcomes={score:0,empty:0,turnover:0},risks={};
  for(let i=0;i<count;i++) {
   const start=copy(s);start.seed=(seed+Math.imul(i+1,2654435761))>>>0;
   const nextDecision=state=>({...policy(state),...(remedyDefense&&other(state.possession)===team?{defense:remedyDefense}:{})});
@@ -39,16 +39,18 @@ function evaluate(s,decision,count,seed,team,remedyDefense) {
   if(continuations>=2000)throw new Error('推演未能結束');
   modelWins+=winProbability(next,team);
   const possessionPoints=next.score[team]-s.score[team];
-  const kind=possessionPoints>0?'score':next.last.kind==='turnover'?'turnover':'empty';
-  outcomes[kind]++;points+=possessionPoints;
-  if(kind!=='score'&&!risks[kind])risks[kind]=copy(next);
+  const liveKind=next.last.kind==='foul'?'empty':next.last.kind;
+  liveOutcomes[liveKind]++;points+=possessionPoints;
+  if(possessionPoints>0)outcomes.score++;
+  const riskKind=liveKind==='turnover'?'turnover':possessionPoints===0?'empty':null;
+  if(riskKind){outcomes[riskKind]++;if(!risks[riskKind])risks[riskKind]=copy(next);}
   let turns=0;
   while(next.phase!=='final'&&turns++<2000)next=simulatePossession(next,nextDecision(next));
   if(next.phase!=='final')throw new Error('推演未能結束');
   wins+=Number(next.score[team]>next.score[other(team)]);
   margin+=next.score[team]-next.score[other(team)];
  }
- return {winProbability:wins/count,modelWinProbability:modelWins/count,expectedMargin:margin/count,expectedPoints:points/count,outcomes,count,risks};
+ return {winProbability:wins/count,modelWinProbability:modelWins/count,expectedMargin:margin/count,expectedPoints:points/count,outcomes,liveOutcomes,count,risks};
 }
 export function monteCarlo(s,decision={},count=s.quarter>=4&&s.clock<=300?512:64,seed=20151225) {
  if(!Number.isInteger(count)||count<1||count>4096||s.phase!=='playing')throw new Error('無可比較的回合');
