@@ -1,6 +1,7 @@
 import io
 import json
 import os
+import socket
 from pathlib import Path
 import sys
 import threading
@@ -67,6 +68,12 @@ class AnalysisTest(unittest.TestCase):
 
 
 class HTTPTest(unittest.TestCase):
+    def test_incomplete_body_times_out(self):
+        with patch.object(server.Handler, 'body_timeout', .05):
+            with socket.create_connection(self.http.server_address, timeout=2) as client:
+                client.sendall(b'POST /api/analyze HTTP/1.0\r\nContent-Type: application/json\r\nContent-Length: 10\r\n\r\n{')
+                self.assertIn(b'400', client.recv(4096))
+
     @classmethod
     def setUpClass(cls):
         cls.http = ThreadingHTTPServer(('127.0.0.1', 0), server.Handler)

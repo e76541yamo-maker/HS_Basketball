@@ -136,6 +136,8 @@ def claude_analysis(payload):
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
+    body_timeout = 10
+
     def send_json(self, value, status=200):
         data = json.dumps(value, ensure_ascii=False).encode()
         try:
@@ -168,6 +170,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             size = int(self.headers.get('Content-Length', '0'))
             if not 0 < size <= 65536 or self.headers.get_content_type() != 'application/json':
                 raise ValueError('Invalid request')
+            self.connection.settimeout(self.body_timeout)
             payload = json.loads(self.rfile.read(size))
             self.send_json(claude_analysis(payload))
         except (ValueError, OSError, RecursionError):
