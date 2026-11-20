@@ -53,6 +53,18 @@ test('both modes supply a current numeric citation and a condition for each loca
  }
 });
 
+test('historical recaps count live offensive boards, including team rebounds',()=>{
+ const s=segmentState(),second=historicalSegment(s),third=historicalSegment(second);
+ assert.equal(second.clock,343);
+ assert.equal(third.quarter,2);assert.equal(third.clock,720);
+ assert.match(decisionResult(second,third).narrative,/進攻籃板 3 次/);
+ const cursor=DATA.windows.findIndex(w=>DATA.possessions[w.possessionIndex].id===22&&w.offset===0),window=DATA.windows[cursor];
+ const before={...s,cursor,score:window.state.score};
+ const after={...before,cursor:second.cursor,score:second.score};
+ assert.match(decisionResult(s,second).narrative,/進攻籃板 5 次/);
+ assert.match(decisionResult(before,after).narrative,/進攻籃板 2 次/);
+});
+
 test('segment argument facts use the same selected plan and sample as the displayed rollout',()=>{
  const s=segmentState();s.coach.tempo='push';
  const result=segmentMonteCarlo(s,s.coach,128),a=segmentAnalysis(s,result);

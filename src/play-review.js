@@ -14,11 +14,21 @@ export function addEvent(events,last){
 function historicalEvents(before,after){
  const events=emptyEvents(),start=DATA.windows[before.cursor],end=after.phase==='final'?null:DATA.windows[after.cursor];
  for(let i=start.possessionIndex;i<=(end?.possessionIndex??DATA.possessions.length-1);i++){
-  const list=DATA.possessions[i].events.slice(i===start.possessionIndex?start.offset:0,i===end?.possessionIndex?end.offset:undefined);
-  for(const e of list){
-   if(e.kind===5)events.turnovers++;
-   if(e.kind===6)events.fouls++;
-   if(e.kind===4&&/Off:[1-9]/.test(e.description))events.rebounds++;
+  const {events:list}=DATA.possessions[i],from=i===start.possessionIndex?start.offset:0,to=i===end?.possessionIndex?end.offset:list.length;
+  let missedBy;
+  for(let offset=0;offset<to;offset++){
+   const e=list[offset],inSegment=offset>=from;
+   if(e.kind===2)missedBy=e.team;
+   if(e.kind===3&&!e.description.includes('Technical')){
+    const attempt=e.description.match(/(\d+) of (\d+)/);
+    missedBy=attempt&&attempt[1]===attempt[2]&&e.description.includes('MISS')?e.team:null;
+   }
+   if(e.kind===4){
+    if(inSegment&&missedBy&&e.team===missedBy)events.rebounds++;
+    missedBy=null;
+   }
+   if(inSegment&&e.kind===5)events.turnovers++;
+   if(inSegment&&e.kind===6)events.fouls++;
   }
  }
  return events;
