@@ -1,0 +1,1 @@
+{"name":"courtside-lab","version":"1.0.0","private":true,"type":"module","scripts":{"start":"python3 server.py","check":"node --check src/engine.js && node --check src/app.js && node --check src/manager-options.js && node --check src/simulation-worker.js","test":"node --test tests/*.test.js && python3 -m unittest discover -s tests -p '*_test.py'"}}

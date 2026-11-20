@@ -1,0 +1,14 @@
+@font-face {
+  font-family: "Noto Sans TC";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/icons/noto-tc-400.ttf?v=634dec6cd899') format('truetype');
+}
+@font-face {
+  font-family: "Noto Sans TC";
+  font-style: normal;
+  font-weight: 500 900;
+  font-display: swap;
+  src: url('/icons/noto-tc-600.ttf?v=f73efad8dba8') format('truetype');
+}
