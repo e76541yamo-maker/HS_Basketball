@@ -30,7 +30,7 @@ export function freeThrowsRemaining(s) {
  const w=currentWindow(s),p=currentPossession(s);
  const es=p.events.slice(w.offset);
  const live=es.findIndex(e=>[1,2,5].includes(e.kind));
- return es.slice(0,live<0?undefined:live).filter(e=>e.kind===3&&e.clock===s.clock&&!e.description.includes('Technical')).length;
+ return es.slice(0,live<0?undefined:live).filter(e=>e.kind===3&&e.clock===s.clock).length;
 }
 function baseState(seed) {
  return {version:3,mode:'replay',valueModel:'current',wpModel:'logistic',cursor:0,possessionIndex:0,seed:seed>>>0,turn:0,phase:'playing',
@@ -45,6 +45,7 @@ export function replayState(cursor=0,seed=20151225) {
  s.shotClock=clamp(24-used,1,24);
  if(w.offset&&p.events.slice(0,w.offset).some(e=>e.kind===6||e.kind===7))s.shotClock=Math.max(14,s.shotClock);
  s.pendingFreeThrows=freeThrowsRemaining(s);
+ s.pendingTechnicalFreeThrows=p.events.slice(w.offset).filter(e=>e.kind===3&&e.clock===s.clock&&e.description.includes('Technical')).length;
  return s;
 }
 export const initialState=(seed=20151225)=>replayState(0,seed);
@@ -148,7 +149,9 @@ export function simulatePossession(state,decision={}) {
  let points=0,kind='empty',foul=false,orb=0,used=0;
  const intentional=!freeThrowsRemaining(state)&&s.plans[def].defense==='intentional'&&s.score[def]<s.score[off];
  const ftCount=freeThrowsRemaining(state);
+ const technical=ftCount>0&&state.pendingTechnicalFreeThrows===ftCount;
  s.pendingFreeThrows=0;
+ s.pendingTechnicalFreeThrows=0;
  if(intentional||ftCount) {
   if(intentional){
    used=Math.min(2,s.clock);const penalty=bonus({...s,clock:s.clock-used},off);personalFoul(s,def,rng,s.clock-used);foul=true;
@@ -177,9 +180,10 @@ export function simulatePossession(state,decision={}) {
   }
  }
  used=Math.min(s.clock,Math.max(ftCount?0:1,used));
- s.clock=Math.max(0,s.clock-used);s.score[off]+=points;s.turn++;s.possession=def;s.shotClock=24;
+ s.clock=Math.max(0,s.clock-used);s.score[off]+=points;
+ if(!technical){s.turn++;s.possession=def;s.shotClock=24;}
  s.seed=Math.floor(rng()*4294967296)>>>0;
- s.decisionReasons=foul?['犯規／罰球結束']:points>0?['進球']:s.quarter>=4&&s.clock<=300?['末節每回合']:[];
+ s.decisionReasons=technical?['技術罰球結束・保留球權']:foul?['犯規／罰球結束']:points>0?['進球']:s.quarter>=4&&s.clock<=300?['末節每回合']:[];
  s.last={kind,team:off,points,seconds:used,offensiveRebounds:orb,foul};
  appendLog(s,'估計・第 '+s.turn+' 回合 '+off+' ＋'+points+' 分・'+(PLAY_TYPES[action]?.label||'罰球')+(orb?'・進攻籃板延續 '+orb+' 次':''));
  periodEnd(s);
