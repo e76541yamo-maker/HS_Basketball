@@ -156,12 +156,13 @@ export function segmentRemedies(s,c=s.coach,count=64){
  return ['switch','drop','blitz','zone'].map(id=>({id,label:DEFENSES[id],...segmentMonteCarlo(s,{...c,defense:id},count)})).sort((a,b)=>b.meanMargin-a.meanMargin);
 }
 export function segmentAnalysis(s,result) {
- const r=result||segmentMonteCarlo(s,s.coach,24),fact=(source,label,value)=>({source,label,value});
- const facts=[fact('實際','歷史區段終點比分',r.historical.score.CLE+'：'+r.historical.score.GSW),fact('估計','區段期望得分',r.expectedPoints.toFixed(2)),fact('估計','區段淨分',r.meanMargin.toFixed(2)),fact('估計','區段後勝率',(100*r.meanWP).toFixed(2)+'%'),fact('估計','淨分十分位／中位／九十分位',r.percentiles.join('／')),fact('估計','落後風險',(100*r.riskRate).toFixed(1)+'%'),fact('估計','教練節奏',TEMPOS[s.coach.tempo]),fact('估計','目標效率修正',targetBoost(s,s.coach).toFixed(3))];
- const margin=Math.round(r.meanMargin),risk=Math.round(100*r.riskRate)+'%',points=Math.round(r.expectedPoints);
- const pro=['估計｜區段平均淨分 '+margin+' 分：'+(margin>0?'現有設定可望拉開分差':margin<0?'現有設定不利於追分':'現有設定未見分差優勢')+'；若更多配對推演使淨分方向反轉，就要改判斷。'];
- const con=['估計｜本段淨分為負 '+risk+'：'+(r.riskRate?'仍有單段失分多於得分的風險':'本批未抽到淨分為負，不代表沒有風險')+'；若增加樣本後比例改變，就要更新判斷。'];
- const attack=['估計｜本隊區段平均得分 '+points+' 分：對手預設防守仍有失分；若改防守讓得分更高，改防就不划算。'];
+ const r=result||segmentMonteCarlo(s,s.coach,12),fact=(source,label,value)=>({source,label,value});
+ const mean=n=>n.toFixed(r.count<=12?0:2),pct=n=>(100*n).toFixed(r.count<=12?0:1)+'%';
+ const margin=mean(r.meanMargin),risk=pct(r.riskRate),points=mean(r.expectedPoints),sample=r.count+' 次配對推演';
+ const facts=[fact('實際','歷史區段終點比分',r.historical.score.CLE+'：'+r.historical.score.GSW),fact('估計','樣本數',r.count),fact('估計','區段期望得分',points),fact('估計','區段淨分',margin),fact('估計','區段後勝率',pct(r.meanWP)),fact('估計','淨分十分位／中位／九十分位',r.percentiles.join('／')),fact('估計','落後風險',risk),fact('估計','教練節奏',TEMPOS[s.coach.tempo]),fact('估計','目標效率修正',targetBoost(s,s.coach).toFixed(3))];
+ const pro=['估計｜區段平均淨分 '+margin+' 分（'+sample+'）：'+(Number(margin)>0?'現有設定可望拉開分差':Number(margin)<0?'現有設定不利於追分':'現有設定未見分差優勢')+'；若更多配對推演使淨分方向反轉，就要改判斷。'];
+ const con=['估計｜本段淨分為負 '+risk+'（'+sample+'）：'+(r.riskRate?'仍有單段失分多於得分的風險':'本批未抽到淨分為負，不代表沒有風險')+'；若增加樣本後比例改變，就要更新判斷。'];
+ const attack=['估計｜本隊區段平均得分 '+points+' 分（'+sample+'）：對手預設防守仍有失分；若改防守讓得分更高，改防就不划算。'];
  const contingency=['實際｜歷史終點 '+r.historical.score.CLE+'：'+r.historical.score.GSW+'：可用來回看原路線；若已走估計分支，就不能歸因給這張策略。'];
- return {summary:'區段教練替代策略・估計',facts,comparisonFacts:[],pro,con,attack,contingency,points:[{sign:'＋',text:'支持這個選擇',detail:pro[0],facts},{sign:'−',text:'代價與限制',detail:con[0],facts:facts.filter(f=>f.source==='估計')}]};
+ return {summary:'區段教練替代策略・估計・'+sample,facts,comparisonFacts:[],pro,con,attack,contingency,points:[{sign:'＋',text:'支持這個選擇',detail:pro[0],facts},{sign:'−',text:'代價與限制',detail:con[0],facts:facts.filter(f=>f.source==='估計')}]};
 }

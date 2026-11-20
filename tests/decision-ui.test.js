@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DATA,other,winProbability} from '../src/engine.js';
 import {momentState} from '../src/scenarios.js';
-import {modeState,segmentState,historicalSegment,runSegment,segmentAnalysis} from '../src/segments.js';
+import {modeState,segmentState,historicalSegment,runSegment,segmentAnalysis,segmentMonteCarlo} from '../src/segments.js';
 import {analyze} from '../src/manager-options.js';
 import {approximatelySame,possessionPlans,segmentPlans,winInterval} from '../src/verification.js';
 import {decisionResult,reviewSummary,emptyEvents,addEvent} from '../src/play-review.js';
@@ -51,4 +51,16 @@ test('both modes supply a current numeric citation and a condition for each loca
  for(const a of samples)for(const card of [a.pro,a.con,a.attack,a.contingency]){
   assert.ok(card.length>0);assert.ok(card.every(p=>/^(實際|估計)｜.*\d.*：.+；若.+。$/.test(p)&&p.length<=96));
  }
+});
+
+test('segment argument facts use the same selected plan and sample as the displayed rollout',()=>{
+ const s=segmentState();s.coach.tempo='push';
+ const result=segmentMonteCarlo(s,s.coach,128),a=segmentAnalysis(s,result);
+ assert.equal(result.meanMargin.toFixed(2),'0.35');
+ assert.match(a.summary,/128 次配對推演/);
+ assert.match(a.pro[0],/區段平均淨分 0\.35 分（128 次配對推演）/);
+ assert.ok(a.con[0].includes((100*result.riskRate).toFixed(1)+'%（128 次配對推演）'));
+ assert.equal(a.facts.find(f=>f.label==='區段淨分').value,'0.35');
+ assert.equal(a.facts.find(f=>f.label==='樣本數').value,result.count);
+ assert.match(segmentAnalysis(s).summary,/12 次配對推演/);
 });

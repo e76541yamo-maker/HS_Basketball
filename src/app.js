@@ -134,13 +134,13 @@ function verificationView(){
 function argumentsView(){
  if(state.phase==='final'){$('analysis').innerHTML='<p>已到終場。選擇左側時刻，或返回已儲存分支。</p>';return;}
  if(coachPhase()){try{validateCoach(state,state.coach);}catch(e){$('analysis').textContent=e.message;return;}}
- const a=coachPhase()?(segmentCache.analysis??=segmentAnalysis(state)):analyze(state,decision());$('source').textContent='規則引擎';
+ const a=coachPhase()?segmentAnalysis(state,simulation||segmentCache.preview?.current):analyze(state,decision());$('source').textContent='規則引擎';
  $('analysis').innerHTML='<p class="analysis-context">'+esc(a.summary)+'</p><div class="argument-grid">'+a.points.map(p=>'<details class="argument" open><summary><span class="sign '+(p.sign==='−'?'negative':'')+'">'+p.sign+'</span>'+esc(p.text)+'</summary><p>'+esc(p.detail)+'</p>'+chips(p.facts)+'</details>').join('')+'</div><p class="contingency"><b>對手回應</b>'+esc(a.attack[0])+'</p><p class="contingency"><b>風險補救</b>'+esc(a.contingency[0])+'</p><button id="rewrite" class="rewrite">Claude 潤飾論點（可選）</button><div id="ai-points"></div>';
  $('rewrite').onclick=async()=>{
   const rev=revision,button=$('rewrite');button.disabled=true;
   const comparison=a.comparisonFacts.map(row=>({...row,models:row.models.filter(m=>m.selected)}));
   try{const response=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({facts:{score:state.score,facts:a.facts,comparison},points:{pro:a.pro,con:a.con,attack:a.attack,contingency:a.contingency}})}),r=await response.json();
-   if(rev!==revision)return;$('source').textContent=r.source||'規則引擎';$('ai-points').innerHTML=r.source==='Claude'?Object.entries(r.points).map(([k,ps])=>'<p class="contingency"><b>'+({pro:'支持',con:'代價',attack:'對手',contingency:'補救'})[k]+'</b>'+ps.map(esc).join('；')+'</p>').join(''):'<p class="muted">未啟用或驗證未通過，保留規則論點。</p>';
+   if(rev!==revision||$('rewrite')!==button)return;$('source').textContent=r.source||'規則引擎';$('ai-points').innerHTML=r.source==='Claude'?Object.entries(r.points).map(([k,ps])=>'<p class="contingency"><b>'+({pro:'支持',con:'代價',attack:'對手',contingency:'補救'})[k]+'</b>'+ps.map(esc).join('；')+'</p>').join(''):'<p class="muted">未啟用或驗證未通過，保留規則論點。</p>';
   }catch{message('分析連線失敗，保留規則引擎。');}finally{button.disabled=false;}
  };
 }
@@ -261,7 +261,11 @@ $('simulate').onclick=()=>{
  worker.onmessage=({data})=>{
   if(data.id!==id||rev!==revision)return;$('simulate').disabled=false;if(data.error){message(data.error);return;}
   simulation=data.result;const m=simulation;verificationView();
-  if(coachPhase()){$('simulation').innerHTML=segmentResult(m);message('推演已更新「驗證本單」。');return;}
+  if(coachPhase()){
+   $('simulation').innerHTML=segmentResult(m);
+   if($('analysis-details').open)argumentsView();
+   message('推演已更新「驗證本單」。');return;
+  }
   const modelSummary='<p class="model-simulation">'+esc(VALUE_MODELS[m.valueModel].label)+'／'+esc(WP_MODELS[m.wpModel].label)+'・首回合後模型均值 '+pct(m.selected.modelWinProbability)+'／基準 '+pct(m.baseline.modelWinProbability)+'；差異 '+(m.modelDelta*100).toFixed(2)+' 個百分點。下方完整推演勝率是終場勝負抽樣比例，不等於所選勝率公式。</p>';
   $('simulation').innerHTML='<div class="simulation-result"><h3>估計・配對蒙地卡羅 '+m.count+' 次</h3><p>本次勝率 <b>'+pct(m.selected.winProbability)+'</b> ／比較基準 <b>'+pct(m.baseline.winProbability)+'</b></p><p>差異 '+(m.delta*100).toFixed(1)+' 個百分點 · '+(m.defending?'對手本回合期望得分 ' :'本回合期望得分 ')+m.selected.expectedPoints.toFixed(2)+'</p><small>視角 '+m.team+'；'+esc(m.baselineLabel)+'。基準屬估計，非已知結果比較。風險使用代表種子，不是條件平均。</small><h3>依期望終場分差排序 <i>估計</i></h3>'+m.riskBranches.map((risk,i)=>'<details class="risk" open><summary>風險：'+(risk.kind==='allowedScore'?'對手得分':risk.kind==='turnover'?'失誤／違例':'未得分')+' · '+risk.count+'/'+m.count+'</summary>'+risk.remedies.map((r,j)=>'<button data-remedy="'+i+':'+j+'">'+(j+1)+'. '+esc(r.label)+' · 終場分差 '+r.expectedMargin.toFixed(2)+' 分 · 勝率 '+pct(r.winProbability)+'（'+r.count+' 次）↗</button>').join('')+'</details>').join('')+'</div>';
   $('simulation').insertAdjacentHTML('afterbegin',modelSummary);
