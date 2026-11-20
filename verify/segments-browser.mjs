@@ -33,7 +33,13 @@ try{
  await page.reload();await openAnalysis();await page.locator('.start-panel > summary').click();assert.equal(await page.locator('#coach-tempo').inputValue(),'push');assert.equal(await page.locator('#coach-defense').inputValue(),'blitz');assert.equal(await page.locator('#coach-target').inputValue(),target);
  await page.locator('#simulate').click();await page.locator('.segment-histogram').waitFor({timeout:120000});
  assert.equal(await page.locator('[data-segment-remedy]').count(),4);assert.match(await page.locator('.simulation-result').innerText(),/百分位/);
- await page.locator('[data-segment-remedy]').first().click();
+ assert.match(await page.locator('#plan-comparison').innerText(),/128 次配對推演/);
+ const remedy=page.locator('[data-segment-remedy]:not([data-segment-remedy="blitz"])').first();
+ const remedyDefense=await remedy.getAttribute('data-segment-remedy');
+ await remedy.click();
+ assert.equal(await page.locator('#coach-defense').inputValue(),remedyDefense);
+ assert.match(await page.locator('#plan-comparison').innerText(),/12 次配對推演/);
+ assert.equal(await page.locator('.segment-histogram').count(),0);
  await page.locator('#simulate').click();await page.locator('.segment-histogram').waitFor({timeout:120000});
  await page.evaluate(()=>document.fonts.ready);await page.screenshot({path:'/home/ubuntu/shots/basketball-segment.png',fullPage:true});
  await page.locator('#branch').click();await page.locator('#execute').click();

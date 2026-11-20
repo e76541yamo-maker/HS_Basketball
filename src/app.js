@@ -240,7 +240,7 @@ document.addEventListener('click',e=>{
  }
  if(b.dataset.player){const impact=MODEL_DATA.players[b.dataset.player];$('player-detail').insertAdjacentHTML('beforeend','<h3>年度來源刊載影響值</h3>'+chips([{source:impact?.bpmSource||'估計',label:'BPM',value:impact?.bpm??0}])+'<p class="muted">來源數值是統計模型，不是本場實際正負分；其陣容與打法映射屬估計，並非因果效果。</p>');}
  if(b.dataset.remedy&&simulation){const [i,j]=b.dataset.remedy.split(':').map(Number),r=simulation.riskBranches[i].remedies[j];transition(copy(r.state),'已建立風險後補救分支：'+r.label);}
- if(b.dataset.segmentRemedy){state.coach.defense=b.dataset.segmentRemedy;segmentAction='run';state.coach.execute='run';revision++;segmentCache=null;persist();render();message('已採用開段防守補救，執行將建立分支。');}
+ if(b.dataset.segmentRemedy){state.coach.defense=b.dataset.segmentRemedy;segmentAction='run';state.coach.execute='run';revision++;simulation=null;segmentCache=null;persist();render();message('已採用開段防守補救，執行將建立分支。');}
 });
 $('close-player').onclick=()=>$('player-dialog').close();
 $('tutorial').onclick=()=>{tutorialView(state.playMode);$('tutorial-dialog').showModal();};
