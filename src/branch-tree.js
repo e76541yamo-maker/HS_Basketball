@@ -17,7 +17,7 @@ export function validState(s) {
 function recoverState(s) {
  if(!s||!Number.isInteger(s.cursor)||s.cursor<0)return null;
  s.cursor=Math.min(s.cursor,DATA.windows.length-1);
- if(s.mode==='replay'){
+ if(s.mode==='replay'&&s.phase!=='final'){
   const cursor=DATA.windows.findIndex(w=>w.possessionIndex===s.possessionIndex&&w.state.clock===s.clock);
   if(cursor<0)return null;
   s.cursor=cursor;

@@ -53,6 +53,8 @@ test('restore remaps stale cursors and drops only invalid auxiliary states',()=>
  assert.equal(restored.state.cursor,0);assert.equal(restored.previous,null);assert.equal(restored.branches.length,1);
  const simulation=simulatePossession(initialState(),{action:'pnr'});simulation.cursor=9999;
  assert.equal(restore(JSON.stringify({state:simulation,branches:[]})).state.cursor,DATA.windows.length-1);
+ const final={...initialState(),phase:'final',clock:0};
+ assert.equal(restore(JSON.stringify({state:final,branches:[]})).state.phase,'final');
 });
 
 test('preview gives no scoring odds when the fastest attempt misses the buzzer',()=>{
