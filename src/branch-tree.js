@@ -4,6 +4,9 @@ export const STORAGE_KEY='courtside.possession.2015.v3';
 const integer=(n,min,max=Number.MAX_SAFE_INTEGER)=>Number.isInteger(n)&&n>=min&&n<=max;
 export function validState(s) {
  return Boolean(s?.version===3&&['replay','simulation'].includes(s.mode)&&['playing','final'].includes(s.phase)
+  &&(s.playMode===undefined||['segment','possession'].includes(s.playMode))
+  &&(!s.coach||(['CLE','GSW'].includes(s.coach.team)&&['slow','normal','push'].includes(s.coach.tempo)&&['switch','drop','blitz','zone'].includes(s.coach.defense)&&typeof s.coach.timeout==='boolean'&&typeof s.coach.target==='string'&&Array.isArray(s.coach.lineup)&&new Set(s.coach.lineup).size===s.coach.lineup.length&&s.coach.lineup.every(id=>player(id)?.team===s.coach.team)))
+  &&(!s.fatigue||Object.values(s.fatigue).every(n=>Number.isFinite(n)&&n>=0))
   &&(s.valueModel===undefined||Object.hasOwn(VALUE_MODELS,s.valueModel))&&(s.wpModel===undefined||Object.hasOwn(WP_MODELS,s.wpModel))
   &&integer(s.cursor,0,DATA.windows.length-1)&&integer(s.possessionIndex,0,DATA.possessions.length-1)&&integer(s.seed,0,4294967295)
   &&integer(s.turn,0)&&integer(s.quarter,1)&&Number.isFinite(s.clock)&&s.clock>=0&&s.clock<=(s.quarter<=4?720:300)

@@ -5,7 +5,7 @@ const page=await browser.newPage({viewport:{width:1440,height:1080}});
 page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
 const read=()=>page.evaluate(()=>JSON.parse(localStorage.getItem('courtside.possession.2015.v3')));
 try{
- await page.goto('http://localhost:3000');await page.locator('[data-moment="start"]').click();
+ await page.goto(process.env.COURTSIDE_URL||'http://localhost:3000');await page.locator('#play-mode').selectOption('possession');await page.locator('[data-moment="start"]').click();
  assert.equal(await page.locator('#value-model').inputValue(),'current');assert.equal(await page.locator('#wp-model').inputValue(),'logistic');
  assert.equal(await page.locator('.model-table thead th').count(),7);assert.equal(await page.locator('.model-table tbody td').count(),48);
  await page.locator('#branch').click();const before=(await read()).state;

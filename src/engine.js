@@ -90,7 +90,12 @@ export function distribution(s,action='pnr',decision={}) {
  if(call==='hold')seconds=Math.min(s.shotClock,s.clock)-1;
  if(call==='twoForOne')seconds=s.clock>=28&&s.clock<=40?6:Math.min(seconds,10);
  if(call==='quickThree') {points[0]+=.05;points[2]-=.20;points[3]+=.15;seconds=6;}
- return adjustDistribution(s,PLAY_TYPES[action]?action:'pnr',{points,turnover:clamp(to,.03,.3),foul:p.foul,seconds:clamp(seconds,1,24),source:'估計',adjustment:a.efficiency,ftAdjustment:a.efficiency});
+ const d=adjustDistribution(s,PLAY_TYPES[action]?action:'pnr',{points,turnover:clamp(to,.03,.3),foul:p.foul,seconds:clamp(seconds,1,24),source:'估計',adjustment:a.efficiency,ftAdjustment:a.efficiency});
+ if(decision.coach){
+  const shift=clamp(decision.coach.ppp/2,-d.points[2],d.points[0]);
+  d.points[0]-=shift;d.points[2]+=shift;d.seconds=clamp(d.seconds*decision.coach.seconds,1,24);
+ }
+ return d;
 }
 export function winProbability(s,team=s.possession) {
  const margin=s.score.CLE-s.score.GSW;

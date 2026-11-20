@@ -86,6 +86,9 @@ class HTTPTest(unittest.TestCase):
         cls.http.shutdown(); cls.http.server_close(); cls.thread.join()
 
     def test_static_allowlist_and_status(self):
+        for path in ('/src/segments.js', '/src/segment-view.js'):
+            with urllib.request.urlopen(self.url + path) as response:
+                self.assertEqual(response.status, 200)
         for path in ('/', '/src/engine.js', '/src/tracking-game.json', '/src/possession-game.json', '/src/model-data.json', '/src/evaluation-models.js', '/src/model-comparison.js', '/src/comparison-table.js', '/src/branch-tree.js', '/icons/noto-tc-400.ttf', '/api/ai-status'):
             with urllib.request.urlopen(self.url + path) as response:
                 self.assertEqual(response.status, 200)
