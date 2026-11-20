@@ -14,6 +14,9 @@ try{
  await page.locator('[data-action="roll"]').click();assert.ok((await page.locator('#distribution').innerText()).includes('估計'));
  await page.locator('#clock-call').selectOption('hold');await page.locator('#defense-call').selectOption('blitz');
  await page.locator('#execute').click();let s=(await read()).state;assert.equal(s.mode,'simulation');assert.ok(s.turn>=1);
+ await page.reload();s=(await read()).state;
+ assert.equal(await page.locator('#clock-call').inputValue(),s.plans[s.possession].clock);
+ assert.equal(await page.locator('#defense-call').inputValue(),s.plans[s.possession==='CLE'?'GSW':'CLE'].defense);
  await page.locator('#undo').click();assert.equal((await read()).state.mode,'replay');
  await page.reload();assert.equal((await read()).state.turn,0);
  await page.locator('#resources [data-player]').first().click();assert.ok(await page.locator('#player-dialog').isVisible());assert.match(await page.locator('#player-detail').innerText(),/年度平均得分/);await page.locator('#close-player').click();

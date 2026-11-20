@@ -9,7 +9,7 @@ const $=id=>document.getElementById(id),esc=s=>String(s??'').replace(/[&<>"']/g,
 const teamName={CLE:'克里夫蘭騎士',GSW:'金州勇士'},clock=s=>Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0'),pct=n=>(n*100).toFixed(1)+'%';
 let saved;try{saved=restore(localStorage.getItem(STORAGE_KEY));}catch{}
 let state=saved?.state||momentState('start'),previous=saved?.previous||null,branches=saved?.branches||[];
-let action='replay',clockCall='normal',defense='switch',revision=0,worker,request=0,simulation=null,replayStep=0;
+let action=options(state)[0]?.id||'',clockCall=state.plans[state.possession].clock,defense=state.plans[state.possession==='CLE'?'GSW':'CLE'].defense,revision=0,worker,request=0,simulation=null,replayStep=0;
 const chips=facts=>facts.map(f=>'<span class="fact-chip '+(f.source==='估計'?'est':'')+'"><b>'+esc(f.source)+'</b> '+esc(f.label)+'：'+esc(f.value)+'</span>').join('');
 const selectOptions=(map,selected)=>Object.entries(map).map(([id,label])=>'<option value="'+id+'" '+(id===selected?'selected':'')+'>'+esc(label)+'</option>').join('');
 const decision=()=>({action,clock:clockCall,defense});
