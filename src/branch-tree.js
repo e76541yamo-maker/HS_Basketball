@@ -14,5 +14,22 @@ export function validState(s) {
    &&integer(s.timeouts?.[t],0,8)&&s.lineups?.[t]?.length===5&&new Set(s.lineups[t]).size===5&&s.lineups[t].every(id=>typeof id==='string'&&player(id)?.team===t)
    &&PLAY_TYPES[s.plans?.[t]?.offense]&&CLOCK_CALLS[s.plans?.[t]?.clock]&&DEFENSES[s.plans?.[t]?.defense]));
 }
-export function restore(text) {try {const x=JSON.parse(text);if(validState(x.state)&&Array.isArray(x.branches)&&x.branches.length<=30&&x.branches.every(b=>typeof b.name==='string'&&validState(b.state))&&(!x.previous||validState(x.previous)))return x;}catch{}return null;}
+function recoverState(s) {
+ if(!s||!Number.isInteger(s.cursor)||s.cursor<0)return null;
+ s.cursor=Math.min(s.cursor,DATA.windows.length-1);
+ if(s.mode==='replay'){
+  const cursor=DATA.windows.findIndex(w=>w.possessionIndex===s.possessionIndex&&w.state.clock===s.clock);
+  if(cursor<0)return null;
+  s.cursor=cursor;
+ }
+ return validState(s)?s:null;
+}
+export function restore(text) {try {
+ const x=JSON.parse(text);
+ if(!x||!Array.isArray(x.branches)||x.branches.length>30)return null;
+ x.state=recoverState(x.state);if(!x.state)return null;
+ x.previous=recoverState(x.previous);
+ x.branches=x.branches.filter(b=>typeof b?.name==='string'&&recoverState(b.state));
+ return x;
+}catch{}return null;}
 export const addBranch=(branches,state,name)=>[...branches,{name:name||'分支 '+(branches.length+1)+'・第 '+state.turn+' 回合',state:copy(state)}].slice(-30);
