@@ -48,7 +48,7 @@ try{
  const beforeSub=await page.locator('[data-option="pnr"] td').last().innerText();await page.locator('#sub-out').selectOption('2544');await page.locator('#sub-in').selectOption('2592');await page.locator('#substitute').click();
  assert.notEqual(await page.locator('[data-option="pnr"] td').last().innerText(),beforeSub);assert.equal((await read()).state.valueModel,'impact');assert.equal((await read()).state.wpModel,'brownian');await page.locator('#undo').click();
  await page.locator('[data-action="spotup"]').click();
- await page.locator('#simulate').click();await page.locator('.simulation-result').waitFor({timeout:120000});assert.match(await page.locator('.simulation-result').innerText(),/實際選擇代理模型/);
+ await page.locator('#simulate').click();await page.locator('.simulation-result').waitFor({timeout:120000});assert.match(await page.locator('.simulation-result').innerText(),/比較基準/);
  assert.ok(await page.locator('[data-remedy]').count()>0);
  for(const risk of await page.locator('.risk').all()){const labels=await risk.locator('[data-remedy]').allTextContents();assert.ok(new Set(labels.map(s=>s.match(/終場分差 ([−\d.-]+)/)?.[1])).size>1);}
  console.log('ENDGAME UI: '+(await page.locator('.simulation-result').innerText()).replaceAll('\n',' | '));
