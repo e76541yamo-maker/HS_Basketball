@@ -38,8 +38,9 @@ function evaluate(s,decision,count,seed,team,remedyDefense) {
   while(next.phase!=='final'&&next.turn===start.turn&&continuations++<2000)next=simulatePossession(next,nextDecision(next));
   if(continuations>=2000)throw new Error('推演未能結束');
   modelWins+=winProbability(next,team);
-  const kind=next.last.kind==='foul'?'empty':next.last.kind;
-  outcomes[kind]++;points+=next.score[team]-s.score[team];
+  const possessionPoints=next.score[team]-s.score[team];
+  const kind=possessionPoints>0?'score':next.last.kind==='turnover'?'turnover':'empty';
+  outcomes[kind]++;points+=possessionPoints;
   if(kind!=='score'&&!risks[kind])risks[kind]=copy(next);
   let turns=0;
   while(next.phase!=='final'&&turns++<2000)next=simulatePossession(next,nextDecision(next));
