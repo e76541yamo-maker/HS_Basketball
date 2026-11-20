@@ -3,12 +3,11 @@ import json
 import urllib.request
 from pathlib import Path
 
-game = json.loads((Path(__file__).resolve().parents[1] / 'src/tracking-game.json').read_text())
-d = game['distributions']['201939']
-payload = {'facts': {'player': 'Stephen Curry', 'observedHolds': d['holds'], 'fga': d['fga'], 'fg': d['fg'],
-                     'finalScore': game['meta']['validation']['finalScore']},
-           'points': {'pro': ['轉移持球，讓隊友開始下一段選擇'], 'con': ['單場樣本有限，命中率已向球隊平均收縮'],
-                      'attack': ['對手靠近可改變距離格，小樣本不能證明因果'], 'contingency': ['若傳球失誤，改看防守端補救分支。']}}
+game = json.loads((Path(__file__).resolve().parents[1] / 'src/possession-game.json').read_text())
+payload = {'facts': {'possessions': game['validation']['possessionCount'], 'finalScore': game['validation']['finalScore'],
+                     'estimatedPlayTypes': True},
+           'points': {'pro': ['以完整球隊進攻分布比較選擇，不把傳球當作新回合。'], 'con': ['小樣本與防守係數可能改變排序，不能推論因果。'],
+                      'attack': ['對手可換防、沉退或夾擊；以防守層調整下一波風險。'], 'contingency': ['未得分先檢查籃板與換防；失誤後比較期望終場分差，而非只看勝率。']}}
 request = urllib.request.Request('http://localhost:3000/api/analyze', data=json.dumps(payload).encode(), headers={'Content-Type': 'application/json'})
 with urllib.request.urlopen(request, timeout=25) as response:
     print('HTTP', response.status)

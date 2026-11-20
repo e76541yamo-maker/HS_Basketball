@@ -175,7 +175,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def send_head(self):
         path = unquote(urlsplit(self.path).path)
         allowed = {'/', '/index.html', '/src/app.js', '/src/engine.js', '/src/scenarios.js', '/src/branch-tree.js',
-                   '/src/manager-options.js', '/src/simulation-worker.js', '/src/style.css', '/src/fonts.css', '/src/tracking-game.json',
+                   '/src/manager-options.js', '/src/simulation-worker.js', '/src/style.css', '/src/fonts.css', '/src/tracking-game.json', '/src/possession-game.json',
                    '/icons/noto-tc-400.ttf', '/icons/noto-tc-600.ttf', '/icons/OFL.txt', '/icons/DejaVu-LICENSE.txt'}
         if path not in allowed:
             self.send_error(404)

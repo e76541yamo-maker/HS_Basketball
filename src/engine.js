@@ -1,124 +1,211 @@
-import game from './tracking-game.json' with {type:'json'};
-export const DATA=game;
+import tracking from './tracking-game.json' with {type:'json'};
+import possessions from './possession-game.json' with {type:'json'};
+
+export const DATA={...tracking,...possessions};
 export const copy=s=>structuredClone(s);
-export const player=id=>game.players[String(id)];
-export const TEAMS=Object.fromEntries(['CLE','GSW'].map(t=>[t,Object.values(game.players).filter(p=>p.team===t)]));
+export const player=id=>DATA.players[String(id)];
 export const other=t=>t==='CLE'?'GSW':'CLE';
-export const ZONES={rim:'籃下',mid:'中距離',three:'外線',backcourt:'後場'};
-export const END_LABELS={pass:'傳球',make:'投籃命中',miss:'投籃未中',turnover:'失誤',foul:'犯規',reset:'控制中斷／重整',change:'球權轉換待判',period:'節末'};
-export function rngFrom(seed) { let x=seed>>>0; return ()=>{ x=(x+0x6D2B79F5)|0; let t=Math.imul(x^x>>>15,1|x);t^=t+Math.imul(t^t>>>7,61|t);return ((t^t>>>14)>>>0)/4294967296; }; }
-export const currentHold=s=>s.recordKind==='hold'?game.holds[game.timeline[s.cursor]?.index]:null;
-export const currentEvent=s=>s.recordKind==='event'?game.events[game.timeline[s.cursor]?.index]:null;
-export function eventLabel(e) { return ({1:'投籃命中',2:'投籃未中',3:'罰球',4:'籃板',5:e?.steal?'失誤／抄截':'失誤',6:'犯規',13:'節末'})[e?.type]||'比賽事件'; }
-const holdTimes=game.holds.map(h=>h.t);
+export const TEAMS=Object.fromEntries(['CLE','GSW'].map(t=>[t,Object.values(DATA.players).filter(p=>p.team===t)]));
+export const PLAY_TYPES={
+ pnr:{label:'擋拆持球者',points:[.42,.06,.38,.13,.01],turnover:.14,foul:.16,seconds:16},
+ roll:{label:'擋拆順下者',points:[.36,.08,.49,.05,.02],turnover:.15,foul:.22,seconds:14},
+ isolation:{label:'單打',points:[.46,.06,.36,.11,.01],turnover:.12,foul:.18,seconds:18},
+ post:{label:'低位背框',points:[.43,.08,.43,.05,.01],turnover:.15,foul:.21,seconds:18},
+ spotup:{label:'定點接球',points:[.44,.03,.27,.25,.01],turnover:.09,foul:.10,seconds:14},
+ motion:{label:'手遞手／無球掩護',points:[.42,.04,.35,.18,.01],turnover:.13,foul:.12,seconds:17},
+ transition:{label:'轉換快攻／推進',points:[.35,.07,.44,.12,.02],turnover:.17,foul:.20,seconds:8}
+};
+export const CLOCK_CALLS={normal:'一般節奏',hold:'壓到最後一擊',twoForOne:'搶兩波攻勢',quickThree:'落後搶三分'};
+export const DEFENSES={switch:'換防',drop:'沉退',blitz:'夾擊施壓',zone:'區域聯防',intentional:'落後故意犯規'};
+const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
+export function rngFrom(seed) {let x=seed>>>0;return()=>{x+=0x6D2B79F5;let t=x;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296;};}
+export const remaining=s=>(Math.max(0,4-s.quarter)*720+s.clock);
+export const bonus=(s,t)=>s.teamFouls[other(t)]>=(s.quarter>4?3:4)||(s.clock<=120&&s.lateFouls[other(t)]>=1);
+export const currentPossession=s=>DATA.possessions[s.possessionIndex]||null;
+export const currentWindow=s=>s.mode==='replay'?DATA.windows[s.cursor]:null;
+export function freeThrowsRemaining(s) {
+ if(s.pendingFreeThrows!=null)return s.pendingFreeThrows;
+ if(s.mode!=='replay')return 0;
+ const w=currentWindow(s),p=currentPossession(s);
+ const es=p.events.slice(w.offset);
+ const live=es.findIndex(e=>[1,2,5].includes(e.kind));
+ return es.slice(0,live<0?undefined:live).filter(e=>e.kind===3&&e.clock===s.clock&&!e.description.includes('Technical')).length;
+}
+function baseState(seed) {
+ return {version:3,mode:'replay',cursor:0,possessionIndex:0,seed:seed>>>0,turn:0,phase:'playing',
+  possession:'CLE',shotClock:24,log:[],last:{kind:'節次開始'},decisionReasons:['節次開始'],plans:{CLE:{offense:'pnr',defense:'switch',clock:'normal'},GSW:{offense:'pnr',defense:'switch',clock:'normal'}}};
+}
 export function replayState(cursor=0,seed=20151225) {
-  if(!Number.isInteger(cursor)||cursor<0||cursor>=game.timeline.length) throw new Error('未知追蹤節點');
-  const item=game.timeline[cursor],r=(item.kind==='hold'?game.holds:game.events)[item.index];
-  let hi=0; while(hi+1<holdTimes.length&&holdTimes[hi+1]<=item.t) hi++;
-  const h=item.kind==='hold'?r:game.holds[hi];
-  const positions=h.positions.map(([id,x,y])=>[String(id),x,y]);
-  const lineups=Object.fromEntries(['CLE','GSW'].map(t=>[t,positions.filter(([id])=>player(id).team===t).map(([id])=>id)]));
-  let handler=item.kind==='hold'?h.player:r.player;
-  if(!handler||!positions.some(([id])=>id===handler)) handler=h.player;
-  return {version:2,mode:'replay',cursor,recordKind:item.kind,seed,quarter:r.q,clock:Math.max(0,720-(item.t-(r.q-1)*720)),elapsed:item.t,shotClock:Math.max(.04,Math.min(24,h.shotClock??24)),score:{...item.score},turn:0,phase:'playing',possession:player(handler).team,handler,zone:h.zone,basketX:h.basketX,positions,lineups,positionsActual:item.kind==='hold',snapshotTime:h.t,anchor:cursor,last:{kind:'等待決策',points:0}};
+ if(!Number.isInteger(cursor)||cursor<0||cursor>=DATA.windows.length)throw new Error('無此回合窗口');
+ const w=DATA.windows[cursor],p=DATA.possessions[w.possessionIndex];
+ const s={...baseState(seed),...copy(w.state),cursor,possessionIndex:w.possessionIndex,turn:w.possessionIndex,
+  possession:p.team,decisionReasons:[...new Set(w.reasons)],shotClock:24};
+ const used=p.start.clock-s.clock;
+ s.shotClock=clamp(24-used,1,24);
+ if(w.offset&&p.events.slice(0,w.offset).some(e=>e.kind===6||e.kind===7))s.shotClock=Math.max(14,s.shotClock);
+ s.pendingFreeThrows=freeThrowsRemaining(s);
+ return s;
 }
 export const initialState=(seed=20151225)=>replayState(0,seed);
-export function matchup(s) {
-  const p=s.positions.find(([id])=>id===s.handler);
-  if(!p) return null;
-  const opponents=s.positions.filter(([id])=>player(id).team!==s.possession);
-  return opponents.sort((a,b)=>Math.hypot(a[1]-p[1],a[2]-p[2])-Math.hypot(b[1]-p[1],b[2]-p[2]))[0]?.[0];
-}
-export function defenderDistance(s) { const a=s.positions.find(([id])=>id===s.handler),b=s.positions.find(([id])=>id===matchup(s)); return a&&b?Math.hypot(a[1]-b[1],a[2]-b[2]):6; }
-export const distanceBin=d=>d<4?'tight':d>=6?'open':'normal';
-export function profile(s,id=s.handler,zone=s.zone) {
-  const p=player(id),d=game.distributions[id],cell=d.shotCells[zone+':'+distanceBin(defenderDistance({...s,handler:id,possession:p.team}))]||{n:0,made:0},prior=game.teamRates[p.team].fgRate;
-  return {observed:d,cell,fg:(cell.made+10*prior)/(cell.n+10),turnover:(d.turnovers+10*teamTos[p.team]/Math.max(1,teamHoldCounts[p.team]))/(d.holds+10),meanHold:d.durations.length?d.durations.reduce((a,b)=>a+b,0)/d.durations.length:2,ft:(d.ftm+10*.75)/(d.fta+10)};
-}
-export function realChoice(s) {
-  const h=currentHold(s);
-  if(!h) return 'reset';
-  return h.endKind==='pass'?'pass:'+h.target:['make','miss'].includes(h.endKind)?h.endZone==='rim'&&h.zone!=='rim'?'drive':'shoot':'reset';
-}
-export function realLabel(s) { const h=currentHold(s),e=currentEvent(s); return h?`${END_LABELS[h.endKind]}${h.target?' → '+player(h.target).name:''}${['make','miss'].includes(h.endKind)?'・'+ZONES[h.endZone]:''}`:eventLabel(e)+(e?.player?'・'+player(e.player).name:''); }
+export const realChoice=s=>freeThrowsRemaining(s)?'freeThrows':currentPossession(s)?.playType||'pnr';
+export const realLabel=s=>s.mode==='replay'?currentPossession(s).description:'估計・依回合分布推演，不再接回史實';
+export const policy=s=>{
+ const gap=s.score[s.possession]-s.score[other(s.possession)];
+ const intentional=s.quarter>=4&&s.clock<=40&&gap>0&&gap<=10&&(gap>=4||s.clock<=s.shotClock+2);
+ return {action:freeThrowsRemaining(s)?'freeThrows':s.plans[s.possession].offense,
+  clock:s.quarter>=4&&s.clock<120?(gap>0?'hold':gap<=-3?'quickThree':'normal'):'normal',
+  defense:intentional?'intentional':s.plans[other(s.possession)].defense};
+};
 export function options(s) {
-  if(s.phase!=='playing') return [];
-  if(s.mode==='replay'&&s.recordKind==='event') return [{id:'replay',label:'依實際紀錄繼續'}];
-  return [...(s.mode==='replay'?[{id:'replay',label:'依實際選擇重播'}]:[]),...s.lineups[s.possession].filter(id=>id!==s.handler).map(id=>({id:'pass:'+id,label:'傳給 '+player(id).name})),{id:'shoot',label:'原地出手'},{id:'drive',label:'切入出手'},{id:'reset',label:'持球重整'}];
+ if(s.phase==='final')return [];
+ return [...(s.mode==='replay'?[{id:'replay',label:'沿實際路線・前往下個決策窗口'}]:[]),
+  ...(freeThrowsRemaining(s)?[{id:'freeThrows',label:'分岔模擬・剩餘罰球'}]:Object.entries(PLAY_TYPES).map(([id,p])=>({id,label:p.label})))];
 }
-const teamDurations=Object.fromEntries(['CLE','GSW'].map(t=>[t,TEAMS[t].flatMap(p=>game.distributions[p.id].durations)]));
-const teamHoldCounts=Object.fromEntries(['CLE','GSW'].map(t=>[t,TEAMS[t].reduce((n,p)=>n+game.distributions[p.id].holds,0)]));
-const teamTos=Object.fromEntries(['CLE','GSW'].map(t=>[t,game.events.filter(e=>e.type===5&&e.team===t).length]));
-const baskets=Object.fromEntries(game.holds.map(h=>[h.team+':'+h.q,h.basketX]));
-function refreshGeometry(s,rng) {
-  s.positions=s.positions.map(([id,x,y])=>[id,Math.max(1,Math.min(93,x+(rng()-.5)*5)),Math.max(1,Math.min(49,y+(rng()-.5)*5))]);
+export function lineupAdjustment(s,t=s.possession) {
+ let efficiency=0,usage=0,ft=0;
+ for(const id of s.lineups[t]) {
+  const season=DATA.seasonStats[id]||{},d=DATA.distributions[id],weight=season.usg_pct||15;
+  const gameTS=d.points/Math.max(1,2*(d.fga+.44*d.fta));
+  const shrunk=(gameTS*Math.min(8,d.fga)+(season.ts_pct||.54)*30)/(Math.min(8,d.fga)+30);
+  efficiency+=shrunk*weight;ft+=(season.ft_pct||.75)*weight;usage+=weight;
+ }
+ return {efficiency:clamp(efficiency/usage/.55,.85,1.16),ft:ft/usage,source:'估計'};
 }
-function switchBall(s,t=other(s.possession)) { s.possession=t;s.handler=s.lineups[t][0];s.shotClock=24;s.basketX=baskets[t+':'+Math.min(4,s.quarter)];s.transition=true;const p=s.positions.find(([id])=>id===s.handler);s.zone=zoneAt(p[1],p[2],s.basketX); }
-export function simulateHold(state,action) {
-  const s=copy(state),rng=rngFrom(s.seed);s.mode='simulation';s.positionsActual=false;s.anchor=state.anchor??state.cursor;s.seed=Math.floor(rng()*4294967296);s.turn++;
-  const p=player(s.handler),d=game.distributions[p.id],stats=profile(s);
-  const durations=d.durations.length?d.durations:teamDurations[p.team];
-  const lead=s.score[s.possession]-s.score[other(s.possession)];
-  const intentional=s.quarter>=4&&s.clock<=40&&lead>0&&lead<=9&&(lead>=4||s.clock<=s.shotClock+2);
-  const advance=s.transition?4:0;
-  if(s.transition) {
-    s.positions=s.positions.map(([id,x,y])=>player(id).team===s.possession?[id,s.basketX<47?Math.min(x,28):Math.max(x,66),y]:[id,x,y]);
-    s.zone=zoneAt(...s.positions.find(([id])=>id===s.handler).slice(1),s.basketX);s.transition=false;
+export function distribution(s,action='pnr',decision={}) {
+ if(action==='freeThrows'){
+  const a=lineupAdjustment(s),n=freeThrowsRemaining(s),points=[1,0,0,0,0];
+  for(let i=0;i<n;i++)for(let k=i+1;k>=0;k--)points[k]=(points[k]||0)*(1-a.ft)+(k?points[k-1]*a.ft:0);
+  return {points,turnover:0,foul:1,seconds:0,source:'估計',adjustment:a.efficiency};
+ }
+ const p=PLAY_TYPES[action]||PLAY_TYPES.pnr,points=[...p.points],a=lineupAdjustment(s);
+ const defense=decision.defense||s.plans[other(s.possession)].defense;
+ let to=p.turnover,seconds=p.seconds;
+ const boost=(a.efficiency-1)*.30+(defense==='drop'&&action==='spotup'?.02:0)-(defense==='zone'&&action==='post'?.02:0);
+ points[0]-=boost;points[2]+=boost;
+ if(defense==='blitz'){to+=.045;points[0]-=.02;points[3]+=.02;}
+ if(defense==='switch'&&action==='pnr'){points[0]+=.012;points[2]-=.012;}
+ const call=decision.clock||s.plans[s.possession].clock;
+ if(call==='hold')seconds=Math.min(s.shotClock,s.clock)-1;
+ if(call==='twoForOne')seconds=s.clock>=28&&s.clock<=40?6:Math.min(seconds,10);
+ if(call==='quickThree') {points[0]+=.05;points[2]-=.20;points[3]+=.15;seconds=6;}
+ return {points,turnover:clamp(to,.03,.3),foul:p.foul,seconds:clamp(seconds,1,24),source:'估計',adjustment:a.efficiency};
+}
+export function winProbability(s,team=s.possession) {
+ const margin=s.score.CLE-s.score.GSW;
+ if(s.phase==='final'){const p=margin>0?1:margin<0?0:.5;return team==='CLE'?p:1-p;}
+ // Logistic approximation to residual scoring variance, calibrated at +6 / 77s / ball.
+ const advantage=margin+(s.possession==='CLE'?.65:-.65)+(bonus(s,'CLE')?.20:0)-(bonus(s,'GSW')?.20:0);
+ const scale=Math.sqrt(Math.max(.08,remaining(s)*.075))*.98;
+ const p=1/(1+Math.exp(-advantage/scale));return team==='CLE'?p:1-p;
+}
+export const leverage=s=>s.phase==='final'?0:(winProbability({...s,score:{...s.score,[s.possession]:s.score[s.possession]+3}},s.possession)-winProbability(s,s.possession))/.055;
+function appendLog(s,text) {s.log=[...s.log,text].slice(-12);}
+function logActual(s,from,to) {
+ for(let i=from;i<to;i++){const p=DATA.possessions[i];appendLog(s,'實際・第 '+(i+1)+' 回合 '+p.team+' ＋'+p.points[p.team]+' 分・'+p.description);}
+}
+function replayNext(state) {
+ let i=state.cursor+1;
+ while(i<DATA.windows.length&&!DATA.windows[i].decision)i++;
+ if(i>=DATA.windows.length) {
+  const s=copy(state),end=DATA.possessions.at(-1).end;
+  Object.assign(s,copy(end),{phase:'final',shotClock:0,turn:DATA.possessions.length,decisionReasons:['終場']});
+  logActual(s,state.possessionIndex,DATA.possessions.length);s.last={kind:'實際・終場'};return s;
+ }
+ const s=replayState(i,state.seed);s.log=copy(state.log);s.plans=copy(state.plans);
+ logActual(s,state.possessionIndex,s.possessionIndex);
+ s.last={kind:s.possessionIndex===state.possessionIndex?'同一回合・死球管理窗口':'實際回合自動前進'};
+ return s;
+}
+function personalFoul(s,t,rng,clock=s.clock) {
+ s.teamFouls[t]++;if(clock<=120)s.lateFouls[t]++;
+ const id=s.lineups[t][Math.floor(rng()*5)];s.personalFouls[id]++;
+ if(s.personalFouls[id]>=6) {
+  const replacement=TEAMS[t].find(p=>!s.lineups[t].includes(p.id)&&s.personalFouls[p.id]<6);
+  if(replacement)s.lineups[t][s.lineups[t].indexOf(id)]=replacement.id;
+ }
+}
+function periodEnd(s) {
+ if(s.clock>0)return;
+ if(s.quarter>=4&&s.score.CLE!==s.score.GSW){s.phase='final';s.shotClock=0;s.decisionReasons=['終場'];return;}
+ s.quarter++;s.clock=s.quarter>4?300:720;s.shotClock=24;
+ s.teamFouls={CLE:0,GSW:0};s.lateFouls={CLE:0,GSW:0};
+ if(s.quarter>4)s.timeouts={CLE:2,GSW:2};
+ s.decisionReasons=['節次開始'];
+}
+export function simulatePossession(state,decision={}) {
+ if(state.phase!=='playing')throw new Error('比賽已結束');
+ if(typeof decision==='string')decision={action:decision};
+ const action=decision.action||policy(state).action;
+ if(!PLAY_TYPES[action]&&action!=='freeThrows')throw new Error('無此進攻類型');
+ if(decision.clock&&!CLOCK_CALLS[decision.clock]||decision.defense&&!DEFENSES[decision.defense])throw new Error('無此戰術');
+ if(action==='freeThrows'&&!freeThrowsRemaining(state))throw new Error('目前沒有待罰球');
+ if(freeThrowsRemaining(state)&&action!=='freeThrows')throw new Error('罰球窗口只能調整換人、暫停或完成罰球');
+ const s=copy(state),off=s.possession,def=other(off),rng=rngFrom(s.seed),d=distribution(s,action,decision);
+ s.mode='simulation';s.plans[off].offense=PLAY_TYPES[action]?action:s.plans[off].offense;
+ if(decision.clock)s.plans[off].clock=decision.clock;
+ if(decision.defense)s.plans[def].defense=decision.defense;
+ let points=0,kind='empty',foul=false,orb=0,used=0;
+ const intentional=!freeThrowsRemaining(state)&&s.plans[def].defense==='intentional'&&s.score[def]<s.score[off];
+ const ftCount=freeThrowsRemaining(state);
+ s.pendingFreeThrows=0;
+ if(intentional||ftCount) {
+  if(intentional){
+   used=Math.min(2,s.clock);const penalty=bonus({...s,clock:s.clock-used},off);personalFoul(s,def,rng,s.clock-used);foul=true;
+   if(!penalty){
+    s.clock-=used;s.shotClock=Math.max(14,s.shotClock-used);s.seed=Math.floor(rng()*4294967296)>>>0;s.last={kind:'foul',team:off,points:0,seconds:used,offensiveRebounds:0,foul:true};s.decisionReasons=['犯規・邊線發球'];
+    appendLog(s,'估計・非加罰犯規，同一回合邊線發球');periodEnd(s);return s;
+   }
   }
-  const seconds=Math.min(s.clock,s.shotClock,intentional?1.5:advance+Math.max(.4,durations[Math.floor(rng()*durations.length)]||2));
-  s.elapsed+=seconds;s.clock=Math.max(0,s.clock-seconds);s.shotClock=Math.max(0,s.shotClock-seconds);s.last={kind:'持球重整',points:0,seconds};
-  if(intentional&&s.clock>0) {for(let i=0;i<2;i++)if(rng()<stats.ft){s.score[s.possession]++;s.last.points++;}s.last.kind='落後方戰術犯規・兩罰';switchBall(s);}
-  else if(s.shotClock<.001||rng()<stats.turnover) {s.last.kind=s.shotClock<.001?'進攻時間違例':'失誤／抄截';switchBall(s);}
-  else if(action.startsWith('pass:')) { s.handler=action.slice(5);const pos=s.positions.find(([id])=>id===s.handler);s.zone=zoneAt(pos[1],pos[2],s.basketX);s.last.kind='傳球'; }
-  else if(action==='shoot'||action==='drive') {
-    if(action==='drive') {s.zone='rim';const pos=s.positions.find(([id])=>id===s.handler);pos[1]=s.basketX<47?9:85;pos[2]=25;}
-    const shooting=profile(s),three=s.zone==='three'||s.zone==='backcourt',value=three?3:2;
-    const plan=s.defensePlan?.team===other(s.possession)?s.defensePlan.id:null;
-    const adjust=plan==='pressure'?.93:plan==='perimeter'?(three?.88:1.04):1;
-    const made=rng()<shooting.fg*(s.zone==='backcourt'?.15:1)*adjust;const foul=rng()<(plan==='pressure'?.12:.075);
-    if(made) { s.score[s.possession]+=value;s.last.points=value; }
-    s.last.kind=made?'投籃命中':'投籃未中';
-    if(foul) { const n=made?1:value; for(let i=0;i<n;i++) if(rng()<shooting.ft) {s.score[s.possession]++;s.last.points++;} s.last.kind=made?'進算加罰':'投籃犯規罰球';switchBall(s); }
-    else if(made) switchBall(s);
-    else if(rng()<(plan==='rebound'?.18:.25)) {s.handler=s.lineups[s.possession][Math.floor(rng()*5)];s.shotClock=24;s.last.kind+='・進攻籃板';}
-    else {switchBall(s);s.last.kind+='・防守籃板';}
+  const n=ftCount||2;
+  for(let i=0;i<n;i++)if(rng()<d.adjustment*lineupAdjustment(s).ft)points++;
+  kind=points?'score':'empty';foul=true;
+ } else {
+  // Offensive rebounds repeat inside this turn; they never hand control to the opponent.
+  for(;;) {
+   used+=Math.min(orb?14:s.shotClock,Math.max(1,d.seconds+(rng()-.5)*8));
+   if(rng()<d.turnover){kind='turnover';break;}
+   let x=rng();points=4;
+   for(let n=0;n<d.points.length;n++){x-=d.points[n];if(x<=0){points=n;break;}}
+   foul=points===1||points===4||rng()<d.foul;
+   if(foul){personalFoul(s,def,rng,Math.max(0,s.clock-used));if(points===0)points=Number(rng()<lineupAdjustment(s).ft)+Number(rng()<lineupAdjustment(s).ft);}
+   if(points>0){kind='score';break;}
+   if(foul||used>=s.clock||rng()>=.24){kind='empty';break;}
+   orb++;
   }
-  refreshGeometry(s,rng);
-  if(s.clock<.001) {
-    s.clock=0;
-    if(s.quarter>=4&&s.score.CLE!==s.score.GSW) s.phase='final';
-    else {s.quarter++;s.clock=s.quarter>4?300:720;switchBall(s,s.quarter%2?'CLE':'GSW');}
-  }
-  if(action.startsWith('pass:')&&s.handler===state.handler) s.handler=s.lineups[s.possession].find(id=>id!==state.handler);
-  return s;
+ }
+ used=Math.min(s.clock,Math.max(ftCount?0:1,used));
+ s.clock=Math.max(0,s.clock-used);s.score[off]+=points;s.turn++;s.possession=def;s.shotClock=24;
+ s.seed=Math.floor(rng()*4294967296)>>>0;
+ s.decisionReasons=foul?['犯規／罰球結束']:points>0?['進球']:s.quarter>=4&&s.clock<=300?['末節每回合']:[];
+ s.last={kind,team:off,points,seconds:used,offensiveRebounds:orb,foul};
+ appendLog(s,'估計・第 '+s.turn+' 回合 '+off+' ＋'+points+' 分・'+(PLAY_TYPES[action]?.label||'罰球')+(orb?'・進攻籃板延續 '+orb+' 次':''));
+ periodEnd(s);
+ return s;
 }
-export function zoneAt(x,y,basket=5.25) {if(basket<47&&x>47||basket>47&&x<47)return 'backcourt';const d=Math.hypot(x-basket,y-25);return d<8?'rim':d>=23.75||(y<3||y>47)&&d>22?'three':'mid';}
-export function play(s,action) {
-  if(!options(s).some(o=>o.id===action)) throw new Error('不合法的持球決策');
-  if(action==='replay') {
-    if(s.cursor+1<game.timeline.length) { const n=replayState(s.cursor+1,s.seed);n.turn=s.turn+(currentHold(s)?1:0);n.last={kind:realLabel(s),points:currentEvent(s)?.points||0};return n; }
-    const n=copy(s);n.phase='final';n.clock=0;n.elapsed=2880;n.score={...game.meta.validation.finalScore};n.turn+=currentHold(s)?1:0;n.last={kind:'史實終場',points:0};return n;
-  }
-  return simulateHold(s,action);
+export function play(state,decision='replay') {
+ const action=typeof decision==='string'?decision:decision.action;
+ if(state.phase!=='playing')throw new Error('比賽已結束');
+ if(action==='replay') {
+  if(state.mode!=='replay')throw new Error('分支不能返回未來史實');
+  return replayNext(state);
+ }
+ let s=simulatePossession(state,decision),automatic=0;
+ while(s.phase==='playing'&&!s.decisionReasons.length) {s=simulatePossession(s,policy(s));automatic++;}
+ s.autoAdvanced=automatic;return s;
 }
-function weighted(entries,rng) { let n=rng()*entries.reduce((sum,[,w])=>sum+w,0);for(const [id,w] of entries) {n-=w;if(n<=0)return id;} return entries.at(-1)[0]; }
-export function policy(s) {
-  if(s.shotClock<5) return 'shoot';
-  if(s.quarter>=4&&s.clock<=120) {
-    const gap=s.score[s.possession]-s.score[other(s.possession)];
-    if(gap>0&&s.shotClock>7)return 'reset';
-    if(gap<0)return rngFrom(s.seed+101)()<(gap<=-4?.8:.6)?'shoot':'drive';
-  }
-  const rng=rngFrom(s.seed+101),counts=game.distributions[s.handler].choices[s.zone]||{};
-  const action=weighted([['pass',(counts.pass||0)+2],['shoot',(counts.shoot||0)+2],['drive',(counts.drive||0)+1],['reset',(counts.reset||0)+1]],rng);
-  if(action!=='pass') return action;
-  const targets=game.distributions[s.handler].targets;
-  return 'pass:'+weighted(s.lineups[s.possession].filter(id=>id!==s.handler).map(id=>[id,(targets[id]||0)+1]),rng);
+export function manage(state,decision) {
+ if(state.phase!=='playing')throw new Error('比賽已結束');
+ const s=copy(state),t=decision.team;
+ if(!TEAMS[t])throw new Error('無此球隊');
+ if(decision.type==='timeout') {
+  if(t!==s.possession&&(!s.decisionReasons.length||s.decisionReasons.every(r=>r==='末節每回合')))throw new Error('活球僅持球隊可叫暫停');
+  if(s.timeouts[t]<=0)throw new Error('沒有暫停');
+  s.timeouts[t]--;s.decisionReasons=['暫停'];s.last={kind:t+' 暫停'};
+ } else if(decision.type==='substitution') {
+  const {out:old,in:incoming}=decision;
+  if(!s.decisionReasons.length||s.decisionReasons.every(r=>r==='末節每回合'))throw new Error('活球不能換人');
+  if(!s.lineups[t].includes(old)||player(incoming)?.team!==t||s.lineups[t].includes(incoming)||s.personalFouls[incoming]>=6)throw new Error('無效換人');
+  s.lineups[t][s.lineups[t].indexOf(old)]=incoming;s.last={kind:'換人・'+player(incoming).name};s.decisionReasons=['換人窗口'];
+ } else throw new Error('無此管理選項');
+ s.mode='simulation';appendLog(s,'估計分支・'+s.last.kind);return s;
 }
-export function winProbability(s,team='CLE') {
-  const remaining=Math.max(0,(4-s.quarter)*720+s.clock),scale=3+Math.sqrt(remaining/24)*2.5;
-  const p=1/(1+Math.exp(-(s.score.CLE-s.score.GSW)/scale));return team==='CLE'?p:1-p;
-}
-const swing=s=>Math.abs(winProbability({...s,score:{...s.score,CLE:s.score.CLE+3}})-winProbability(s));
-const avgSwing=game.timeline.filter(x=>x.kind==='hold').reduce((sum,x)=>sum+swing({quarter:game.holds[x.index].q,clock:game.holds[x.index].clock,score:x.score}),0)/game.holds.length;
-export const leverage=s=>swing(s)/avgSwing;

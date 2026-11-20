@@ -1,4 +1,11 @@
 import {DATA,replayState} from './engine.js';
-const at=(q,clock)=>DATA.timeline.findIndex(x=>x.kind==='hold'&&DATA.holds[x.index].q===q&&DATA.holds[x.index].clock<=clock);
-export const MOMENTS=[{id:'start',label:'從開局開始',detail:'聖誕大戰・全部追蹤持球',cursor:0},...[[540,'末節・九分鐘','Dellavedova 追分前・事件 428'],[319,'末節・五分鐘','Livingston 扣籃後・事件 476'],[134,'末節・兩分鐘','Love 補籃後・事件 505'],[79,'末節・最後攻防','Curry 突破後・事件 515'],[20,'末節・罰球拉鋸','最後的得分機會・事件 524']].map(([clock,label,detail],i)=>({id:'key'+i,label,detail,cursor:at(4,clock)}))];
-export function momentState(id) {const m=MOMENTS.find(m=>m.id===id);if(!m||m.cursor<0)throw new Error('未知情境');const s=replayState(m.cursor);s.moment=id;return s;}
+const find=(quarter,clock,team)=>DATA.windows.findIndex(w=>w.state.quarter===quarter&&w.state.clock<=clock&&(!team||DATA.possessions[w.possessionIndex].team===team));
+export const MOMENTS=[
+ {id:'start',label:'聖誕開場',detail:'首節開始・完整球隊進攻',cursor:0},
+ {id:'key0',label:'末節・追分起點',detail:'第四節最後五分鐘・每回合決策',cursor:find(4,300)},
+ {id:'key1',label:'末節・關鍵暫停',detail:'第四節 4:34・勇士暫停窗口',cursor:find(4,274)},
+ {id:'key2',label:'末節・進攻犯規',detail:'第四節 2:36・騎士暫停與換人',cursor:find(4,156)},
+ {id:'key3',label:'末節・最後攻防',detail:'第四節 1:19・騎士落後六分的整波進攻',cursor:find(4,79,'CLE')},
+ {id:'key4',label:'末節・罰球與追分',detail:'第四節 0:20・犯規罰球管理',cursor:find(4,20)}
+];
+export function momentState(id) {const m=MOMENTS.find(m=>m.id===id)||MOMENTS[0];return {...replayState(m.cursor),moment:m.id};}
