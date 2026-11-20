@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {initialState,play,options,substitute,timeout,bench,TEAMS} from '../src/engine.js';
+import {initialState,play,options,substitute,timeout,bench,TEAMS,matchup} from '../src/engine.js';
 
 test('real rosters contain players only and sourced season rates',()=>{
   assert.equal(TEAMS.LAL.length,15); assert.equal(TEAMS.SAC.length,14);
@@ -19,6 +19,16 @@ test('substitutions and timeouts preserve clocks and validate resources',()=>{
 test('regulation ties enter overtime and overtime decides a winner',()=>{
   let s=initialState(2); s.quarter=4; s.clock=1; s.score={LAL:80,SAC:80}; s=play(s,'hold'); assert.equal(s.quarter,5); assert.equal(s.clock,300); assert.equal(s.phase,'playing');
   s.clock=1; s.score.LAL++; s=play(s,'hold'); assert.equal(s.phase,'final'); assert.throws(()=>play(s,'hold')); assert.deepEqual(options(s),[]);
+});
+test('shooting fouls charge the defender and sixth foul replaces them; shot clock cannot be held forever',()=>{
+  let found=false;
+  for(let seed=1;seed<100;seed++) {
+    const s=initialState(seed),d=matchup(s); s.fouls[d]=5; s.defense.SAC='hack';
+    const n=play(s,'drive');
+    if(n.fouls[d]===6) { found=true; assert.ok(!n.lineups.SAC.includes(d)); assert.equal(n.teamFouls.SAC,1); assert.ok(!bench(n,'SAC').some(p=>p.id===d)); break; }
+  }
+  assert.ok(found);
+  let s=initialState(4); s.shotClock=1; s=play(s,'hold'); assert.equal(s.last.kind,'進攻時間違例'); assert.equal(s.possession,'SAC'); assert.equal(s.shotClock,24);
 });
 test('seeded many-game sweep: legal increments, monotonic clocks, floor/stamina invariants and finals',()=>{
   const kinds=new Set();

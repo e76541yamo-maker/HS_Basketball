@@ -31,7 +31,7 @@ class AnalysisTest(unittest.TestCase):
     def test_grounding_and_card_errors(self):
         for bad in ({}, {**POINTS, 'pro': []}, {**POINTS, 'con': ['999 分']*4}, {**POINTS, 'pro': ['\n']}, {**POINTS, 'pro': ['😀']}):
             with self.assertRaises(ValueError): server.validated_points(bad)
-        for text in ('999 分', '九十九分', '百分之九十九', '99%', '表currency'):
+        for text in ('999 分', '九十九分', '百分之九十九', '99%', '八個', '九十九籃板', '表currency'):
             with self.assertRaises(ValueError): server.validate_grounding({'pro': [text]}, PAYLOAD['facts'], POINTS)
         server.validate_grounding({'pro': ['46.9%']}, PAYLOAD['facts'], POINTS)
         self.assertEqual(server.numbers_in('七十五分'), {75})

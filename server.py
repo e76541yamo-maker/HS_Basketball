@@ -47,7 +47,8 @@ def numbers_in(value):
         for match in re.finditer(r'(?:\d+(?:\.\d+)?|\.\d+)\s*%?', text):
             token = match.group().strip()
             numbers.add(Decimal(token[:-1].strip()) / 100 if token.endswith('%') else Decimal(token))
-        for match in re.finditer(rf'百分之({CHINESE_NUMBER})|({CHINESE_NUMBER})(?=分|秒|次|場|人|成|回合|節|%|$)', text):
+        text = re.sub(r'一(?:定|再|直|樣|起|旦|律|致|般|切)', '', text)
+        for match in re.finditer(rf'百分之({CHINESE_NUMBER})|({CHINESE_NUMBER})', text):
             number = chinese_number(match[1] or match[2])
             if match[1] or text[match.end():].startswith('%'):
                 number /= 100

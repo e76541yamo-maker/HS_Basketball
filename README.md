@@ -59,3 +59,14 @@ python3 subset_fonts.py /path/to/NotoSansTC.ttf /path/to/DejaVuSans.ttf
 ```
 
 `ui_characters.py` gathers visible sources and decoded roster names. Tests inspect both font cmaps and content hashes. Node tests cover immutable seeded transitions, legal scores, clocks, pass handoffs, resource errors, overtime, a 100-full-game seeded sweep, layered tactics, paired simulations and scenario/branch/autosave flows. Python tests cover font and HTTP/Claude validators without requiring a key. Browser verification uses Playwright from the sibling reference repository and plays a complete game with actual UI clicks.
+
+With the server running and the sibling HS-BaseSta Playwright installation available:
+
+```sh
+node verify/browser.mjs
+# Desktop, mobile and full-game PNGs: /home/ubuntu/shots/basketball-*.png
+# Against a key-enabled server, explicitly checks source rather than HTTP status:
+python3 verify/live-claude.py
+```
+
+Verified browser run: 550 UI decisions to a regulation final, Lakers 154–152 Kings, no console errors. This deliberately shot-heavy test is an interaction/invariant check, not a claim of historically calibrated scoring.
