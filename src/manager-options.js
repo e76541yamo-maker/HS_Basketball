@@ -38,12 +38,12 @@ function evaluate(s,decision,count,seed,team,remedyDefense) {
   while(next.phase!=='final'&&next.turn===start.turn&&continuations++<2000)next=simulatePossession(next,nextDecision(next));
   if(continuations>=2000)throw new Error('推演未能結束');
   modelWins+=winProbability(next,team);
-  const possessionPoints=next.score[team]-s.score[team];
+  const possessionPoints=next.score[s.possession]-s.score[s.possession];
   const liveKind=next.last.kind==='foul'?'empty':next.last.kind;
   liveOutcomes[liveKind]++;points+=possessionPoints;
   if(possessionPoints>0)outcomes.score++;
-  const riskKind=liveKind==='turnover'?'turnover':possessionPoints===0?'empty':null;
-  if(riskKind){outcomes[riskKind]++;if(!risks[riskKind])risks[riskKind]=copy(next);}
+  const riskKind=s.possession!==team?(possessionPoints>0?'allowedScore':null):liveKind==='turnover'?'turnover':possessionPoints===0?'empty':null;
+  if(riskKind){outcomes[riskKind]=(outcomes[riskKind]||0)+1;if(!risks[riskKind])risks[riskKind]=copy(next);}
   let turns=0;
   while(next.phase!=='final'&&turns++<2000)next=simulatePossession(next,nextDecision(next));
   if(next.phase!=='final')throw new Error('推演未能結束');
@@ -52,10 +52,10 @@ function evaluate(s,decision,count,seed,team,remedyDefense) {
  }
  return {winProbability:wins/count,modelWinProbability:modelWins/count,expectedMargin:margin/count,expectedPoints:points/count,outcomes,liveOutcomes,count,risks};
 }
-export function monteCarlo(s,decision={},count=s.quarter>=4&&s.clock<=300?512:64,seed=20151225) {
- if(!Number.isInteger(count)||count<1||count>4096||s.phase!=='playing')throw new Error('無可比較的回合');
+export function monteCarlo(s,decision={},count=s.quarter>=4&&s.clock<=300?512:64,seed=20151225,team=s.possession) {
+ if(!Number.isInteger(count)||count<1||count>4096||s.phase!=='playing'||!['CLE','GSW'].includes(team))throw new Error('無可比較的回合');
  const selectedAction=decision.action==='replay'?realChoice(s):decision.action||'pnr';
- const chosen={...decision,action:freeThrowsRemaining(s)?'freeThrows':selectedAction},team=s.possession;
+ const chosen={...decision,action:freeThrowsRemaining(s)?'freeThrows':selectedAction};
  const historical=!s.diverged&&s.turn===s.possessionIndex&&DATA.possessions[s.possessionIndex]?.team===s.possession;
  const baselineDecision=historical?{action:realChoice(s)}:policy(s);
  const baselineLabel=historical?DATA.possessions[s.possessionIndex].description:'估計・目前陣容與球隊策略基準';
@@ -63,6 +63,7 @@ export function monteCarlo(s,decision={},count=s.quarter>=4&&s.clock<=300?512:64
  const riskBranches=Object.entries(selected.risks).filter(([,state])=>state.phase==='playing').map(([kind,state])=>{
   const remedies=['switch','drop','blitz','zone'].map((id,j)=>{
    const start=copy(state);start.plans[team].defense=id;
+   if(start.playMode==='segment'&&start.coach?.team===team)start.coach.defense=id;
    const r=evaluate(start,policy(start),Math.min(256,Math.max(64,count)),seed+700,team,id);
    delete r.risks;
    return {...r,id,label:DEFENSES[id],state:start};
@@ -70,6 +71,6 @@ export function monteCarlo(s,decision={},count=s.quarter>=4&&s.clock<=300?512:64
   return {kind,count:selected.outcomes[kind],remedies};
  });
  delete selected.risks;delete baseline.risks;
- return {source:'估計',valueModel:valueModel(s),wpModel:wpModel(s),selected,baseline,count,seed,delta:selected.winProbability-baseline.winProbability,modelDelta:selected.modelWinProbability-baseline.modelWinProbability,
+ return {source:'估計',team,defending:team!==s.possession,valueModel:valueModel(s),wpModel:wpModel(s),selected,baseline,count,seed,delta:selected.winProbability-baseline.winProbability,modelDelta:selected.modelWinProbability-baseline.modelWinProbability,
   stateWinProbability:winProbability(s,team),leverage:leverage(s),riskBranches,remedies:riskBranches[0]?.remedies||[],baselineLabel};
 }

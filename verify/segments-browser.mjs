@@ -46,6 +46,15 @@ try{
  await page.locator('[data-segment-clutch]').click();
  if((await read()).state.possession==='CLE')await page.locator('#execute').click();
  assert.equal((await read()).state.possession,'GSW');assert.equal(await page.locator('#clock-call').isDisabled(),true);
+ const opponentDefense=(await read()).state.plans.GSW.defense;
+ await page.locator('#simulate').click();await page.locator('[data-remedy]').first().waitFor({timeout:120000});
+ assert.match(await page.locator('.simulation-result').innerText(),/視角 CLE/);
+ assert.match(await page.locator('.risk').first().innerText(),/對手得分/);
+ await page.locator('[data-remedy]').first().click();
+ const remedied=(await read()).state;assert.equal(remedied.plans.GSW.defense,opponentDefense);assert.equal(remedied.plans.CLE.defense,remedied.coach.defense);
+ console.log('SEGMENT CLUTCH REMEDY: managed CLE perspective; applying remedy preserves GSW defense');
+ await page.locator('[data-segment-clutch]').click();
+ if((await read()).state.possession==='CLE')await page.locator('#execute').click();
  assert.equal(await page.locator('#defense-call').isEnabled(),true);await page.locator('#defense-call').selectOption('intentional');
  await page.locator('#execute').click();assert.equal((await read()).state.mode,'simulation');
  console.log('SEGMENT CLUTCH UI: trailing managed defense exposes and executes intentional foul');

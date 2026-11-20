@@ -5,6 +5,7 @@ import {MODEL_DATA} from '../src/evaluation-models.js';
 import {restore} from '../src/branch-tree.js';
 import {SEGMENTS,clutch,managedStop,segmentState,modeState,historicalSegment,runSegment,coachDecision,playMix,targetBoost,segmentMonteCarlo,segmentComparison,segmentAnalysis,segmentRemedies} from '../src/segments.js';
 import {comparisonTable} from '../src/comparison-table.js';
+import {monteCarlo} from '../src/manager-options.js';
 
 test('eight to ten coach segments use quarter starts and historical timeouts, with no short segments',()=>{
  assert.ok(SEGMENTS.length>=8&&SEGMENTS.length<=10);
@@ -103,4 +104,20 @@ test('late technical free throw finishes the live continuation without repeating
  const n=runSegment(s,s.coach,{action:'freeThrows',defense:'switch'});
  assert.ok(n.turn>s.turn);assert.equal(n.pendingTechnicalFreeThrows,0);assert.ok(n.score.CLE>=s.score.CLE);
  assert.equal(n.segmentPossessions,n.turn-s.turn);
+});
+
+test('clutch defensive remedies protect the managed team without changing opponent defense',()=>{
+ const s=modeState(DATA.windows.map((_,i)=>replayState(i)).find(s=>s.quarter===4&&s.clock<120&&s.possession==='GSW'&&s.score.CLE<s.score.GSW),'segment');
+ const result=monteCarlo(s,policy(s),64,20151225,'CLE');
+ assert.equal(result.team,'CLE');assert.equal(result.defending,true);assert.ok(result.selected.expectedPoints>0);
+ assert.ok(result.riskBranches.length);assert.ok(result.riskBranches.every(r=>r.kind==='allowedScore'));
+ for(const risk of result.riskBranches)for(const remedy of risk.remedies){
+  assert.equal(remedy.state.plans.CLE.defense,remedy.id);assert.equal(remedy.state.coach.defense,remedy.id);
+  assert.equal(remedy.state.plans.GSW.defense,s.plans.GSW.defense);
+ }
+ const offense=monteCarlo(s,policy(s),64,20151225);
+ assert.equal(offense.team,'GSW');assert.equal(offense.defending,false);
+ assert.equal(result.selected.winProbability+offense.selected.winProbability,1);
+ assert.ok(Math.abs(result.selected.expectedMargin+offense.selected.expectedMargin)<1e-12);
+ assert.throws(()=>monteCarlo(s,policy(s),1,1,'invalid'));
 });
