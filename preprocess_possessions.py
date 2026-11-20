@@ -136,6 +136,8 @@ def build(rows, tracking, box_totals=None):
             else:
                 active['offensiveRebounds'] += 1; rebound_pending = False
         elif kind == 5:
+            if any(word in description.lower() for word in ('out of bounds', 'travel', 'violation', 'offensive foul')):
+                active['windows'].append({'offset': len(active['events']), 'reason': '違例', 'state': snap(clock)})
             close(clock, 'turnover')
         elif kind == 13:
             close(clock, 'periodEnd')

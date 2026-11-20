@@ -57,6 +57,13 @@ class PossessionTest(unittest.TestCase):
         self.assertTrue(windows)
         self.assertTrue(all(x['possessions'][w['possessionIndex']]['team'] == 'CLE' for w in windows))
 
+    def test_dead_ball_turnovers_open_next_decision_but_steals_do_not(self):
+        for text, expected in [('Out of Bounds Turnover', True), ('Traveling Turnover', True), ('Bad Pass (STEAL)', False)]:
+            rows = [self.row(12, '12:00'), self.row(5, '11:30', 'CLE', text=text),
+                    self.row(1, '11:10', 'GSW', '6', score='0 - 2'), self.row(13, '0:00')]
+            x = build(rows, self.tracking)
+            self.assertEqual(x['windows'][1]['decision'], expected)
+
     def test_committed_windows_cover_every_dead_ball_and_late_possession(self):
         x = json.loads((Path(__file__).resolve().parents[1]/'src/possession-game.json').read_text())
         for p in x['possessions']:
