@@ -32,10 +32,13 @@ export function evaluateOption(s,decision={}) {
  }
  return {action,expectedPoints,winProbabilityAfter,leverage,valueModel:valueModel(s),wpModel:wpModel(s),source:'估計'};
 }
-export function compareModels(s,decision={}) {
+export function compareModels(s,decision={},team=s.possession) {
  const rows=options(s).map(o=>({...o,label:o.id==='replay'?'實際選擇代理':o.label,values:[]})),columns=[];
  for(const value of Object.keys(VALUE_MODELS))for(const wp of Object.keys(WP_MODELS)) {
-  const values=rows.map(row=>evaluateOption({...s,valueModel:value,wpModel:wp},{...decision,action:row.id}));
+  const values=rows.map(row=>{
+   const v=evaluateOption({...s,valueModel:value,wpModel:wp},{...decision,action:row.id});
+   return team===s.possession?v:{...v,winProbabilityAfter:1-v.winProbabilityAfter};
+  });
   const ranked=[...values].sort((a,b)=>b.winProbabilityAfter-a.winProbabilityAfter);
   const best=[...new Set(ranked.filter(v=>ranked[0].winProbabilityAfter-v.winProbabilityAfter<1e-12).map(v=>v.action))].sort();
   const column={valueModel:value,wpModel:wp,label:VALUE_MODELS[value].label+'・'+WP_MODELS[wp].label,best};columns.push(column);
