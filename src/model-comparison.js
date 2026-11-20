@@ -5,10 +5,12 @@ export function evaluateOption(s,decision={}) {
  const action=decision.action==='replay'?realChoice(s):decision.action||'pnr';
  const d=distribution(s,action,decision),team=s.possession,before=winProbability(s,team);
  const intentional=!freeThrowsRemaining(s)&&(decision.defense||s.plans[other(team)].defense)==='intentional'&&s.score[other(team)]<s.score[team];
- const seconds=intentional?Math.min(2,s.clock):d.seconds;
+ const expired=!intentional&&!freeThrowsRemaining(s)&&Math.min(s.shotClock,Math.max(1,d.seconds-4))>s.clock;
+ const seconds=intentional?Math.min(2,s.clock):expired?s.clock:d.seconds;
  const penalty=intentional&&bonus({...s,clock:s.clock-seconds},team);
  const retain=intentional&&!penalty||freeThrowsRemaining(s)>0&&s.pendingTechnicalFreeThrows===freeThrowsRemaining(s);
  let probabilities=d.points.map((p,i)=>(1-d.turnover)*p+(i===0?d.turnover:0));
+ if(expired)probabilities=[1,0,0,0,0];
  if(intentional){
   const ft=Math.min(1,(d.ftAdjustment??d.adjustment)*lineupAdjustment(s).ft);
   probabilities=penalty?[(1-ft)**2,2*ft*(1-ft),ft**2,0,0]:[1,0,0,0,0];

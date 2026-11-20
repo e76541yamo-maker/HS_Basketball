@@ -54,3 +54,12 @@ test('restore remaps stale cursors and drops only invalid auxiliary states',()=>
  const simulation=simulatePossession(initialState(),{action:'pnr'});simulation.cursor=9999;
  assert.equal(restore(JSON.stringify({state:simulation,branches:[]})).state.cursor,DATA.windows.length-1);
 });
+
+test('preview gives no scoring odds when the fastest attempt misses the buzzer',()=>{
+ const s=initialState();s.quarter=4;s.clock=.1;s.score={CLE:80,GSW:79};
+ for(const action of ['pnr','transition','spotup']){
+  const preview=evaluateOption(s,{action});
+  assert.equal(preview.expectedPoints,0);
+  assert.equal(preview.winProbabilityAfter,winProbability(simulatePossession(s,{action}),'CLE'));
+ }
+});
