@@ -7,7 +7,7 @@ try{
  await page.goto(process.env.COURTSIDE_URL||'http://localhost:3108');
  await page.locator('#coach-tempo').selectOption('push');
  await page.locator('#analysis-details > summary').click();
- assert.match(await page.locator('#analysis').innerText(),/12 次配對推演/);
+ await page.locator('#analysis .analysis-context').filter({hasText:/12 次配對推演/}).waitFor();
  await page.locator('#simulate').click();
  await page.getByText('區段淨分分布・估計 128 次').waitFor();
  assert.match(await page.locator('#simulation').innerText(),/淨分 0\.35/);
